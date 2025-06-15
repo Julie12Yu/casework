@@ -29,6 +29,7 @@ GOOGLE_DRIVE_FOLDER_NAME = "may_25_court_pdfs"
 SCOPES = ["https://www.googleapis.com/auth/drive"]
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
+USE_LOCAL_ONLY = True
 
 # --- Google OAuth User-Based Flow ---
 def get_google_drive_service():
@@ -89,24 +90,30 @@ category_descriptions = {
 
 # --- Main Execution ---
 def main():
-    service = get_google_drive_service()
-    folder_query = f"name='{GOOGLE_DRIVE_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
-    folders = search_documents(service, folder_query)
-    if not folders:
-        print("Folder not found.")
-        return
-    folder_id = folders[0]['id']
+    if not USE_LOCAL_ONLY:
+        service = get_google_drive_service()
+        folder_query = f"name='{GOOGLE_DRIVE_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+        folders = search_documents(service, folder_query)
+        if not folders:
+            print("Folder not found.")
+            return
+        folder_id = folders[0]['id']
 
-    pdf_query = f"'{folder_id}' in parents and mimeType='application/pdf' and trashed=false"
-    pdfs = search_documents(service, pdf_query)
-    for pdf in pdfs[:50]:
-        download_pdf(service, pdf['id'], pdf['name'])
+        pdf_query = f"'{folder_id}' in parents and mimeType='application/pdf' and trashed=false"
+        pdfs = search_documents(service, pdf_query)
+        for pdf in pdfs[:50]:
+            download_pdf(service, pdf['id'], pdf['name'])
+    else:
+        print("USING LOCAL FILES ONLY – skipping Drive download")
 
     texts = extract_texts()
-
+    print("extracted texts!")
     docs = list(texts.values())
+    print("got docs..")
     names = list(texts.keys())
 
+    # --- TF-IDF + t-SNE ---
+    print("starting on tf-idf and t-sne")
     vectorizer = TfidfVectorizer()
     tfidf = vectorizer.fit_transform(docs)
 
@@ -115,16 +122,17 @@ def main():
 
     kmeans = KMeans(n_clusters=3, random_state=42)
     kmeans_labels = kmeans.fit_predict(tfidf)
-    print("t-SNE with kmeans is OVER. Not as over as my acadmeic career tho")
+
     plt.scatter(tsne_result[:, 0], tsne_result[:, 1], c=kmeans_labels, cmap='viridis')
     plt.title("t-SNE with KMeans")
     plt.savefig("tsne_plot.png")
-    print("yes i am FINISEHD PLOT so julie doesn't go isnane!")
 
+    # --- Categorization ---
     case_categories = {}
-    print("yes i am doing the categorization now so julie doesn't go isnane!")
     for name, text in texts.items():
         prompt = f"""
+Your max response is up to 4 words long. DO NOT respond with more than four words.
+Only respond with the category name, nothing else.
 You are classifying legal cases that involve artificial intelligence into categories.
 Choose one of the following categories that best fits this case, based on the descriptions below:
 
@@ -138,11 +146,17 @@ Case content:
         with tempfile.NamedTemporaryFile("w+", delete=False) as tf:
             tf.write(prompt)
             tf.flush()
-            result = subprocess.run(["ollama", "run", "llama3", tf.name], capture_output=True, text=True)
+            result = subprocess.run(
+                ["ollama", "run", "llama3"],
+                input=prompt,
+                text=True,
+                capture_output=True
+            )
+            if name == "some_example.pdf":
+                print(prompt)
             category = result.stdout.strip()
         case_categories[name] = category
-    print("im dumping categories (allegedly)")
-    print("here's what itd be: ", case_categories.items())
+
     with open("case_categories.json", "w") as f:
         json.dump(case_categories, f, indent=2)
 
