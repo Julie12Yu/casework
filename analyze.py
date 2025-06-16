@@ -163,5 +163,14 @@ Case content:
     for doc, cat in case_categories.items():
         print(f"{doc}: {cat}")
 
+        # --- Group by Category ---
+    grouped_categories = defaultdict(list)
+    for case_name, category in case_categories.items():
+        grouped_categories[category].append(case_name)
+
+    with open("grouped_case_categories.json", "w") as f:
+        json.dump(grouped_categories, f, indent=2)
+
+
 if __name__ == "__main__":
     main()
