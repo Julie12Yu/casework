@@ -128,6 +128,7 @@ def main():
     plt.savefig("tsne_plot.png")
 
     # --- Categorization ---
+    print("categorizing...")
     case_categories = {}
     for name, text in texts.items():
         prompt = f"""
