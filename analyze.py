@@ -7,9 +7,11 @@
 import os
 import io
 import json
-import subprocess
-import tempfile
+from dotenv import load_dotenv
+load_dotenv()
 import matplotlib.pyplot as plt
+import google
+import google.generativeai as genai
 from pathlib import Path
 from collections import defaultdict
 
@@ -30,6 +32,7 @@ SCOPES = ["https://www.googleapis.com/auth/drive"]
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
 USE_LOCAL_ONLY = True
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 # --- Google OAuth User-Based Flow ---
 def get_google_drive_service():
@@ -217,13 +220,14 @@ def main():
     """
     # --- Categorization ---
     print("categorizing...")
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel('gemini-1.5-flash')
     case_categories = {}
     for name, text in texts.items():
         prompt = f"""
-
-
 Categorize each case into one or more primary containers from the list below, but only when the legal issues at the heart of the case make those categories truly salient. 
 Avoid tagging multiple categories unless necessary. A case should not be tagged as AI-related merely because AI is mentioned — only if it forms a central part of the legal dispute.
+**Important Guidance for Categorization:**
 If a case is not substantively about AI, place it in "Unrelated", even if the term appears in job titles, company names, or marketing material. 
 If a case is Unrelated, it may not go into any other category.
 {json.dumps(category_descriptions, indent=2)}
@@ -233,18 +237,8 @@ Only respond with the category name, nothing else.
 Case content:
 {text[:3000]}
 """
-        with tempfile.NamedTemporaryFile("w+", delete=False) as tf:
-            tf.write(prompt)
-            tf.flush()
-            result = subprocess.run(
-                ["ollama", "run", "llama3"],
-                input=prompt,
-                text=True,
-                capture_output=True
-            )
-            if name == "some_example.pdf":
-                print(prompt)
-            category = result.stdout.strip()
+        response = model.generate_content(prompt)
+        category = response.text.strip()
         case_categories[name] = category
 
     with open("case_categories.json", "w") as f:
