@@ -75,18 +75,108 @@ def extract_texts():
 
 # --- Categorization Setup ---
 category_descriptions = {
-    "Privacy and power": "AI deriving intimate information from available data; legal doctrine gaps in privacy law coverage",
-    "Justice and equity": "AI discrimination and differential treatment affecting demographic progress and opportunities",
-    "Fair Use and Ownership": "Content ownership rights and permissible use of materials for AI training",
-    "Section 230 and Platform Liability": "Responsibility and accountability for AI-generated content and outputs",
-    "AI Court Misconduct": "Legal professionals caught using AI that produced hallucinated information in court proceedings",
-    "AI Expert Testimony": "Cases where AI technology is relevant due to expert witnesses having AI backgrounds or expertise",
-    "AI as Legal Example": "AI used as illustrative examples or supporting factors to clarify or strengthen legal arguments",
-    "Fraudulent Market Practices": "AI used for market manipulation, trading fraud, or as shell companies for illegal activities",
-    "Antitrust": "Competition issues between smaller AI companies and major tech corporations",
-    "AI Human Harm": "Cases where AI systems are accused of causing direct physical or emotional damage to individuals",
-    "Other": "Cases that don't fit into the above AI-related legal categories"
-}
+    "ai_in_legal_proceedings": {
+      "description": "AI usage and implications within court proceedings",
+      "subcategories": {
+        "general_use_of_ai_in_court": {
+          "explanation": "Using AI to write the case, having AI made material to convince the jury"
+        },
+        "hallucinations_in_court": {},
+        "testifying_expert": {
+          "explanation": "Who counts as an expert for AI, can AI count as an expert?"
+        },
+        "court_and_attorney_rules": {
+          "explanation": "You should only cite or submit things that you believe are true"
+        }
+      }
+    },
+    "antitrust": {
+      "description": "Competition law and market regulation issues",
+      "subcategories": {
+        "fraudulent_market_practices": {"explanation": "Using AI for fraudulent market practices"},
+        "price_fixing": {"explanation": "Price fixing either using or concerning AI"},
+        "collusion": {"explanation": "Collusion between tech giants, or collusion surrounding AI"}
+      }
+    },
+    "consumer_protection": {
+      "description": "Laws protecting consumer rights and interests",
+      "subcategories": {
+        "fraudulent_market_practices": {"explanation": "Misinformation, harming the consumers through the use of AI"},
+        "privacy_and_power": {"explanation": "Harming the consumer's rights to privacy through the use of AI or to gain data to train AI with"}
+      }
+    },
+    "intellectual_property_law": {
+      "description": "IP rights, patents, and related legal issues",
+      "subcategories": {
+        "fair_use": {},
+        "privacy_and_power": {},
+        "patent": {"explanation": "Concerned with if adding AI counts qualifies for a new patent"}
+      }
+    },
+    "torts": {
+        "description": "A wrongful act or an infringement of a right (other than under contract) leading to civil legal liability. Torts are common law causes of action",
+        "note": "Use this category when the core dispute involves civil liability between private actors",
+        "subcategories": {
+            "ai_damage_to_humans": {
+            "explanation": "Harm caused by AI systems to individuals, including hallucinations, defamation, emotional distress, or physical injury."
+            },
+            "product_liability_negligence": {
+            "explanation": "Negligent design, testing, or failure to warn about defective products — including AI-based or tech-integrated systems."
+            },
+            "privacy_and_power": {
+            "explanation": "Private-sector intrusion on individual privacy, such as corporate surveillance or unauthorized use of user data. Do not use if the harm arises from government action — use Justice and Equity instead."
+            },
+            "section_230": {
+            "explanation": "Claims about platform responsibility for third-party or algorithmically surfaced content, especially involving defamation, discrimination, or user-generated material."
+            }
+        }
+    },
+    "justice_and_equity": {
+      "description": "Cases involving constitutional rights, civil liberties, or government misconduct. Includes surveillance, discrimination, due process, or unlawful use of state power.",
+      "note": "Use this when the case is against a government entity or raises issues of constitutional significance (e.g., freedom of speech, unlawful search, state bias). Do not use for civil disputes between private parties — those go under Torts.",
+      "subcategories": {
+        "constitutional_and_civil_rights": {
+          "explanation": "Challenges to government action under the Fourth, First, or other constitutional amendments (e.g., surveillance, censorship, compelled speech)."
+        },
+        "bias_and_discrimination": {
+          "explanation": "Unlawful or systemic bias, including race, gender, or other protected characteristics — especially where government or large platforms are involved."
+        },
+        "due_process": {
+          "explanation": "Failures in procedural fairness, including secret algorithms or automated systems used in high-stakes decisions without transparency or appeal."
+        }
+      }
+    },
+    "privacy_data_protection": {
+      "description": "Cases involving statutory privacy rights, consumer data use, or unauthorized data sharing by private entities. Focused on data governance, not general harm.",
+      "note": "Use this category when plaintiffs invoke statutes like BIPA, CCPA, GDPR, or similar consumer privacy frameworks. Do NOT use if the privacy harm comes from government surveillance (use Justice and Equity) or if it's a tort-based dispute without statutory grounding (use Torts).",
+      "subcategories": {
+        "privacy_and_power": {
+          "explanation": "Commercial exploitation of personal data, surveillance capitalism, or privacy-invasive platform practices."
+        },
+        "ai_damage_to_humans": {
+          "explanation": "Loss of privacy resulting directly from AI systems misusing or revealing personal information."
+        },
+        "individual_rights_to_suit": {
+          "explanation": "Right of individuals to bring claims under privacy statutes like BIPA or CCPA, including biometric consent or data sale violations."
+        }
+      }
+    },
+    "unrelated": {
+      "description": "Cases where AI is does not pertain towards the legal issue at all. If the case is unrelated, the case should fit in no other category",
+      "subcategories": {
+        "testifying_expert": {
+          "explanation": "Testifying expert has AI in description, but AI experience is not relevant towards the testifying content"
+        },
+        "ai_as_example": {
+          "explanation": "The rest of the case does not ever mention or relate to anything towards AI. Reasoning using AI does not change anything."
+        },
+        "ai_mentioned_in_passing": {
+          "explanation": "AI mentioned in passing but has no impact towards any logic present within the case"
+        }
+      }
+    }
+  }
+
 
 # --- Main Execution ---
 def main():
@@ -108,9 +198,7 @@ def main():
 
     texts = extract_texts()
     print("extracted texts!")
-    docs = list(texts.values())
-    print("got docs..")
-    names = list(texts.keys())
+    """
 
     # --- TF-IDF + t-SNE ---
     print("starting on tf-idf and t-sne")
@@ -126,17 +214,18 @@ def main():
     plt.scatter(tsne_result[:, 0], tsne_result[:, 1], c=kmeans_labels, cmap='viridis')
     plt.title("t-SNE with KMeans")
     plt.savefig("tsne_plot.png")
-
+    """
     # --- Categorization ---
     print("categorizing...")
     case_categories = {}
     for name, text in texts.items():
         prompt = f"""
-Your max response is up to 4 words long. DO NOT respond with more than four words.
-Only respond with the category name, nothing else.
-You are classifying legal cases that involve artificial intelligence into categories.
-Choose one of the following categories that best fits this case, based on the descriptions below:
 
+
+Categorize each case into one or more primary containers from the list below, but only when the legal issues at the heart of the case make those categories truly salient. 
+Avoid tagging multiple categories unless necessary. A case should not be tagged as AI-related merely because AI is mentioned — only if it forms a central part of the legal dispute.
+If a case is not substantively about AI, place it in "Unrelated", even if the term appears in job titles, company names, or marketing material. 
+If a case is Unrelated, it may not go into any other category.
 {json.dumps(category_descriptions, indent=2)}
 
 Only respond with the category name, nothing else.
