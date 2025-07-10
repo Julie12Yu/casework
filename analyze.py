@@ -225,32 +225,31 @@ def main():
     case_categories = {}
     for name, text in texts.items():
         prompt = f"""
-Categorize each case into one or more primary containers from the list below, but only when the legal issues at the heart of the case make those categories truly salient. 
-Avoid tagging multiple categories unless necessary. A case should not be tagged as AI-related merely because AI is mentioned — only if it forms a central part of the legal dispute.
-**Important Guidance for Categorization:**
-If a case is not substantively about AI, place it in "Unrelated", even if the term appears in job titles, company names, or marketing material. 
-If a case is Unrelated, it may not go into any other category.
-{json.dumps(category_descriptions, indent=2)}
+          Categorize each case into one or more primary containers from the list below, but only when the legal issues at the heart of the case make those categories truly salient. 
+          Avoid tagging multiple categories unless necessary. A case should not be tagged as AI-related merely because AI is mentioned — only if it forms a central part of the legal dispute.
+          **Important Guidance for Categorization:**
+          If a case is not substantively about AI, place it in "Unrelated", even if the term appears in job titles, company names, or marketing material. 
+          If a case is Unrelated, it may not go into any other category.
+          {json.dumps(category_descriptions, indent=2)}
 
-Only respond with the category name, nothing else.
+          Only respond with the category name, nothing else.
 
-Case content:
-{text[:3000]}
-"""
+          Case content:
+          {text[:3000]}
+          """
         response = model.generate_content(prompt)
         category = response.text.strip()
         case_categories[name] = category
 
-    with open("case_categories.json", "w") as f:
-        json.dump(case_categories, f, indent=2)
-
-    for doc, cat in case_categories.items():
-        print(f"{doc}: {cat}")
-
-        # --- Group by Category ---
+    # --- Group by Category (adjusted for multiple categories) ---
     grouped_categories = defaultdict(list)
-    for case_name, category in case_categories.items():
-        grouped_categories[category].append(case_name)
+    for case_name, categories_list in case_categories.items():
+        if isinstance(categories_list, list): # Ensure it's a list, not a string from old single-label attempts
+            for category in categories_list:
+                grouped_categories[category].append(case_name)
+        else: # Handle cases where old single-label might have been stored as string
+            grouped_categories[categories_list].append(case_name)
+
 
     with open("grouped_case_categories.json", "w") as f:
         json.dump(grouped_categories, f, indent=2)
