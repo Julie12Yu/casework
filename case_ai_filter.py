@@ -17,7 +17,7 @@ API_KEY = "kqlpY3lEpu92JTjgNhdQyD56UkstzI0fhUsYNtYj"
 SEARCH_QUERY = "artificial intelligence collection:USCOURTS"
 PAGE_SIZE = 100  # Increase this for more results per request
 MAX_RESULTS = None # Set to None for no limit
-GOOGLE_DRIVE_FOLDER_NAME = "may_25_court_pdfs"  # Name of the folder to create in Google Drive
+GOOGLE_DRIVE_FOLDER_NAME = "july_9_court_pdfs"  # Name of the folder to create in Google Drive
 
 # Google Drive API scopes
 SCOPES = ['https://www.googleapis.com/auth/drive']
@@ -153,7 +153,7 @@ def contains_ai_filter(pdf_content):
         text = ""
         total = 0
         for page in reader.pages:
-            if total > 50:
+            if total > 10:
                 break
             text += page.extract_text()
             total += 1
