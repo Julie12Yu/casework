@@ -3,3 +3,4 @@ token.pickle
 token.json
 data/
 texts.json
+.env
