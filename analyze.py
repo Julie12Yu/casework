@@ -13,10 +13,93 @@ DATA_DIR = "data"
 openai.api_key_path = ".env"
 MAX_RETRIES = 5
 
-# === Extract text ===
+# === Extract and clean text ===
 def extract_text_from_pdf(file_path):
     reader = PdfReader(file_path)
-    return "\n".join(page.extract_text() or "" for page in reader.pages).strip()
+    raw_text = "\n".join(page.extract_text() or "" for page in reader.pages).strip()
+    return clean_legal_text(raw_text)
+
+def clean_legal_text(text, max_chars=50000):
+    """Clean and filter legal document text to remove noise and irrelevant content."""
+    if not text:
+        return ""
+    
+    # Limit length - take first half only
+    text = text[:max_chars]
+    
+    # Remove common PDF artifacts and noise
+    import string
+    
+    # Split into lines for line-by-line filtering
+    lines = text.split('\n')
+    cleaned_lines = []
+    
+    for line in lines:
+        line = line.strip()
+        
+        # Skip empty lines
+        if not line:
+            continue
+            
+        # Remove lines that are mostly numbers (page numbers, case numbers, etc.)
+        if len(line) > 0 and sum(c.isdigit() for c in line) / len(line) > 0.7:
+            continue
+            
+        # Remove lines that are mostly punctuation or special characters
+        if len(line) > 0 and sum(c in string.punctuation for c in line) / len(line) > 0.5:
+            continue
+            
+        # Remove very short lines (likely artifacts)
+        if len(line) < 3:
+            continue
+            
+        # Remove lines that look like headers/footers (all caps, short)
+        if len(line) < 50 and line.isupper():
+            continue
+            
+        # Remove lines with excessive spacing or weird characters
+        if '  ' in line and len(line.replace(' ', '')) < len(line) * 0.3:
+            continue
+            
+        # Clean the line itself
+        cleaned_line = clean_line(line)
+        if cleaned_line:
+            cleaned_lines.append(cleaned_line)
+    
+    # Rejoin and do final cleanup
+    cleaned_text = '\n'.join(cleaned_lines)
+    
+    # Remove excessive whitespace
+    import re
+    cleaned_text = re.sub(r'\n\s*\n\s*\n', '\n\n', cleaned_text)  # Max 2 newlines
+    cleaned_text = re.sub(r'[ \t]+', ' ', cleaned_text)  # Normalize spaces
+    
+    return cleaned_text.strip()
+
+def clean_line(line):
+    """Clean individual line of text."""
+    import re
+    
+    # Remove non-printable characters except newlines and tabs
+    line = ''.join(c for c in line if c.isprintable() or c in '\n\t')
+    
+    # Fix common OCR errors and artifacts
+    line = re.sub(r'[^\w\s\.,;:!?()"\'-]', ' ', line)  # Keep only common punctuation
+    
+    # Remove excessive repeated characters
+    line = re.sub(r'(.)\1{4,}', r'\1\1\1', line)  # Max 3 repeated chars
+    
+    # Remove standalone numbers and weird fragments
+    line = re.sub(r'\b\d+\b(?!\s*[A-Za-z])', ' ', line)  # Remove standalone numbers
+    
+    # Clean up spacing
+    line = re.sub(r'\s+', ' ', line).strip()
+    
+    # Skip lines that became too short after cleaning
+    if len(line) < 5:
+        return ""
+        
+    return line
 
 # === Retry-safe GPT call ===
 def gpt_chat(messages, model="gpt-4-turbo-preview"):  # Use latest model
@@ -49,55 +132,58 @@ def parse_retry_after(error_text):
 
 # === Combined Classification (More Efficient) ===
 def classify_case_combined(text):
-    # Truncate more intelligently - focus on key sections
-    truncated_text = get_relevant_sections(text)
+    # Use cleaned text directly, limited to 15000 chars for API efficiency
+    truncated_text = text[:15000]
     
     messages = [{
         "role": "system",
         "content": """You are a legal expert specializing in AI-related litigation. 
 
-STEP 1: Determine if AI/algorithms/machine learning are materially involved in the legal claims.
+Classify cases based on whether AI/algorithms/automated systems are involved in the legal claims.
 
-Look for these AI-related keywords and concepts:
-- Artificial intelligence, AI, machine learning, algorithms, automated systems
-- Neural networks, deep learning, natural language processing
-- Recommendation systems, search algorithms, ranking systems
-- Automated decision-making, algorithmic bias, AI discrimination
-- Chatbots, virtual assistants, AI-powered tools
-- Computer vision, image recognition, facial recognition
-- Predictive analytics, AI models, training data
+Categories with specific guidance:
 
-AI is MATERIAL if these technologies are:
-- Central to the business being sued
-- Part of the alleged harmful conduct
-- Mentioned in the legal claims or causes of action
-- Used in decision-making that's being challenged
+AI in Legal Proceedings: 
+- AI systems used IN court processes, legal case management, or litigation tools
+- AI affecting judicial decisions or legal outcomes
+- Legal technology platforms, e-discovery tools, legal AI assistants
+- Look for: litigation software, legal tech, court systems, judicial AI
 
-STEP 2: If AI is material, classify by the PRIMARY legal harm:
+Antitrust: 
+- Market competition, monopolization involving ANY tech companies
+- Anti-competitive practices by major platforms or AI companies  
+- Look for: market dominance, competition, monopoly, anti-competitive
 
-**AI in Legal Proceedings**: AI/algorithms used in courts, legal processes, case management, or litigation tools that affect legal outcomes
+Consumer Protection: 
+- Deceptive practices, unfair business practices with tech/automated systems
+- Misleading marketing of tech products or AI capabilities
 
-**Justice and Equity**: 
-- Discrimination by AI hiring, lending, housing tools
-- Algorithmic bias in services, recommendations, search results
-- Civil rights violations by automated systems
-- Platform bias against protected groups
+IP Law: 
+- Patents, copyrights, trademarks for AI models or tech
+- Training data disputes, AI-generated content ownership
 
-**Antitrust**: Anti-competitive practices involving AI companies or AI technology market dominance
+Privacy and Data Protection: 
+- Data breaches, unauthorized data collection by automated systems
+- Privacy violations involving algorithms or data processing
 
-**Consumer Protection**: Deceptive AI marketing, unfair AI business practices, misleading AI product claims
+Tort: 
+- Physical harm, emotional distress, negligence involving ANY automated systems
+- Defamation, personal injury from tech systems or algorithms
+- Look for: negligence, injury, harm, emotional distress, defamation
 
-**IP Law**: Patents, copyrights, trademarks for AI models, training data disputes, AI-generated content ownership
+Justice and Equity: 
+- Discrimination or bias by automated systems (hiring, lending, search)
+- Civil rights violations involving algorithms or platforms
+- Unfair treatment based on algorithmic decisions
 
-**Privacy and Data Protection**: Unauthorized data collection/use by AI, AI-related data breaches, privacy violations
-
-**Tort**: Physical/emotional harm caused by AI systems, negligence in AI deployment, defamation by AI
-
-KEY INSIGHT: If you see discrimination, bias, or unfair treatment involving algorithms/AI → "Justice and Equity"
-If you see AI in court/legal systems → "AI in Legal Proceedings"
+CRITICAL FIXES:
+1. For antitrust cases involving tech companies use "Antitrust" not Unrelated
+2. For tort claims involving any tech systems use "Tort" not Unrelated  
+3. For legal technology or court AI systems use "AI in Legal Proceedings"
+4. Be more inclusive - tech companies typically use automated systems
 
 Respond with JSON: {"ai_material": true/false, "category": "category_name"}
-If not AI-related, use: {"ai_material": false, "category": "Unrelated"}"""
+If truly no automated systems involved, use: {"ai_material": false, "category": "Unrelated"}"""
     }, {
         "role": "user", 
         "content": f"Analyze this case:\n\n{truncated_text}"
@@ -122,36 +208,7 @@ If not AI-related, use: {"ai_material": false, "category": "Unrelated"}"""
                 return category
         return "Unknown"
 
-def get_relevant_sections(text, max_chars=10000):
-    """Extract most relevant sections for classification."""
-    # Look for key legal sections
-    sections = []
-    
-    # Split by common legal section markers
-    patterns = [
-        r'BACKGROUND',
-        r'FACTUAL ALLEGATIONS',
-        r'STATEMENT OF FACTS',
-        r'CLAIMS FOR RELIEF',
-        r'CAUSE OF ACTION',
-        r'COMPLAINT',
-        r'SUMMARY',
-        r'NATURE OF THE ACTION'
-    ]
-    
-    for pattern in patterns:
-        matches = re.finditer(pattern, text, re.IGNORECASE)
-        for match in matches:
-            start = match.start()
-            end = min(start + 2000, len(text))  # Take 2000 chars after each section
-            sections.append(text[start:end])
-    
-    # If no structured sections found, take beginning and middle
-    if not sections:
-        sections = [text[:5000], text[len(text)//2:len(text)//2+5000]]
-    
-    combined = "\n\n".join(sections)
-    return combined[:max_chars]
+
 
 # === Enhanced Two-Step Approach (Alternative) ===
 def is_ai_material_enhanced(text):
@@ -250,6 +307,8 @@ def classify_case(file_path, use_combined=True):
     case_text = extract_text_from_pdf(file_path)
     if not case_text:
         return "Empty Document"
+    
+    # DEBUG: Print text length and first few words
 
     if use_combined:
         result = classify_case_combined(case_text)
