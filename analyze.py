@@ -215,31 +215,34 @@ def is_ai_material_enhanced(text):
     """More precise AI materiality check with examples."""
     messages = [{
         "role": "system",
-        "content": """You are a legal expert. Determine if AI is MATERIALLY involved in the legal claims.
+        "content": 
+        """
+        You are a legal expert. Determine if AI is MATERIALLY involved in the legal claims.
 
-AI is MATERIAL if:
-- AI systems directly caused or contributed to the alleged harm
-- AI technology is the subject of the legal dispute
-- AI processes are central to the legal violation
-- The case involves algorithmic bias, discrimination, or unfair AI decision-making
-- AI systems are part of the business model being challenged
-- The lawsuit involves AI hiring tools, recommendation systems, or automated decision-making
+        AI is MATERIAL if:
+        - AI systems directly caused or contributed to the alleged harm
+        - AI technology is the subject of the legal dispute
+        - AI processes are central to the legal violation
+        - The case involves algorithmic bias, discrimination, or unfair AI decision-making
+        - AI systems are part of the business model being challenged
+        - The lawsuit involves AI hiring tools, recommendation systems, or automated decision-making
 
-AI is NOT MATERIAL if:
-- Only mentioned in passing or background
-- Used as a comparison or metaphor
-- Company happens to use AI but claims don't specifically involve AI technology
+        AI is NOT MATERIAL if:
+        - Only mentioned in passing or background
+        - Used as a comparison or metaphor
+        - Company happens to use AI but claims don't specifically involve AI technology
 
-EXAMPLES:
-- MATERIAL: "AI hiring tool discriminated against candidates" 
-- MATERIAL: "Algorithm biased search results against plaintiff"
-- MATERIAL: "AI model trained on copyrighted content"
-- NOT MATERIAL: "Company CEO mentioned AI in earnings call"
-- NOT MATERIAL: "AI mentioned as future technology trend"
+        EXAMPLES:
+        - MATERIAL: "AI hiring tool discriminated against candidates" 
+        - MATERIAL: "Algorithm biased search results against plaintiff"
+        - MATERIAL: "AI model trained on copyrighted content"
+        - NOT MATERIAL: "Company CEO mentioned AI in earnings call"
+        - NOT MATERIAL: "AI mentioned as future technology trend"
 
-Be more inclusive - if AI is mentioned in context of the business operations or decision-making that's being challenged, it's likely material.
+        Be more inclusive - if AI is mentioned in context of the business operations or decision-making that's being challenged, it's likely material.
 
-Respond ONLY: "MATERIAL" or "NOT_MATERIAL\""""
+        Respond ONLY: "MATERIAL" or "NOT_MATERIAL\"
+        """
     }, {
         "role": "user",
         "content": f"Case text:\n\n{text[:8000]}"
@@ -254,31 +257,34 @@ def classify_legal_category_enhanced(text):
     """Enhanced classification with better category definitions."""
     messages = [{
         "role": "system", 
-        "content": """Classify this AI-related legal case by PRIMARY legal theory:
+        "content": 
+        """
+        Classify this AI-related legal case by PRIMARY legal theory:
 
-**AI in Legal Proceedings**: AI systems used in courts, legal decision-making, case management, litigation support affecting legal outcomes
+        AI in Legal Proceedings: AI systems used in courts, legal decision-making, case management, litigation support affecting legal outcomes
 
-**Antitrust**: Market competition, monopolization, anti-competitive practices involving AI companies or technology
+        Antitrust: Market competition, monopolization, anti-competitive practices involving AI companies or technology
 
-**Consumer Protection**: Deceptive AI marketing, unfair AI business practices, consumer fraud with AI products/services
+        Consumer Protection: Deceptive AI marketing, unfair AI business practices, consumer fraud with AI products/services
 
-**IP Law**: Patents, copyrights, trademarks, trade secrets for AI models, training data, AI-generated content
+        IP Law: Patents, copyrights, trademarks, trade secrets for AI models, training data, AI-generated content
 
-**Privacy and Data Protection**: Data breaches, privacy violations, unauthorized data collection/use by AI systems
+        Privacy and Data Protection: Data breaches, privacy violations, unauthorized data collection/use by AI systems
 
-**Tort**: Personal injury, negligence, defamation, emotional distress caused by AI systems or decisions
+        Tort: Personal injury, negligence, defamation, emotional distress caused by AI systems or decisions
 
-**Justice and Equity**: Discrimination, bias, civil rights violations, algorithmic fairness issues, AI hiring/lending/housing discrimination
+        Justice and Equity: Discrimination, bias, civil rights violations, algorithmic fairness issues, AI hiring/lending/housing discrimination
 
-IMPORTANT GUIDANCE:
-- For cases involving AI discrimination in hiring, lending, housing, or services → "Justice and Equity"
-- For cases about AI bias in decision-making systems → "Justice and Equity" 
-- For platform/search algorithm bias claims → "Justice and Equity"
-- For AI systems used in legal/judicial processes → "AI in Legal Proceedings"
-- Don't default to "Unrelated" - if AI is mentioned in context of business operations, it's likely material
+        IMPORTANT GUIDANCE:
+        - For cases involving AI discrimination in hiring, lending, housing, or services → "Justice and Equity"
+        - For cases about AI bias in decision-making systems → "Justice and Equity" 
+        - For platform/search algorithm bias claims → "Justice and Equity"
+        - For AI systems used in legal/judicial processes → "AI in Legal Proceedings"
+        - Don't default to "Unrelated" - if AI is mentioned in context of business operations, it's likely material
 
-Look at the PRIMARY legal claims and allegations, not just secondary issues.
-Respond with ONLY the category name."""
+        Look at the PRIMARY legal claims and allegations, not just secondary issues.
+        Respond with ONLY the category name.
+        """
     }, {
         "role": "user",
         "content": f"Case details:\n\n{text[:10000]}"
