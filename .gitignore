@@ -4,3 +4,8 @@ token.json
 data/
 texts.json
 .env
+tsne_plot.png
+legal_cases_umap.png
+legal_cases_tsne_visualization.png
+legal_cases.json
+.json
