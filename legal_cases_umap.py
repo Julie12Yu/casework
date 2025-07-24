@@ -1,16 +1,13 @@
 import json
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import StandardScaler
 from umap import UMAP
 from collections import Counter
-
-# Set style for better visualizations
-plt.style.use('seaborn-v0_8')
-sns.set_palette("husl")
 
 def load_and_process_data(json_file_path):
     """
@@ -74,15 +71,58 @@ def perform_umap(features, n_neighbors=15, min_dist=0.1, n_components=2, random_
     
     return embedding, reducer
 
-def create_visualization(embedding, categories, titles):
+def wrap_text(text, width=50):
     """
-    Create the UMAP visualization with color coding
+    Wrap text to specified width for better display in hover boxes
+    """
+    words = text.split()
+    lines = []
+    current_line = []
+    current_length = 0
+    
+    for word in words:
+        if current_length + len(word) + 1 <= width:
+            current_line.append(word)
+            current_length += len(word) + 1
+        else:
+            if current_line:
+                lines.append(' '.join(current_line))
+            current_line = [word]
+            current_length = len(word)
+    
+    if current_line:
+        lines.append(' '.join(current_line))
+    
+    return '<br>'.join(lines)
+
+def create_interactive_visualization(embedding, categories, titles, summaries, output_file='legal_cases_umap_interactive.html'):
+    """
+    Create an interactive UMAP visualization with hover information
     """
     # Count cases per category
     category_counts = Counter(categories)
     
-    # Define category colors with dramatic differences
-    category_colors = {
+    # Create DataFrame for Plotly
+    df_plot = pd.DataFrame({
+        'x': embedding[:, 0],
+        'y': embedding[:, 1],
+        'category': categories,
+        'title': titles,
+        'summary': summaries,
+        'summary_preview': [s[:300] + '...' if len(s) > 300 else s for s in summaries],
+        'title_wrapped': [title[:80] + '...' if len(title) > 80 else title for title in titles]
+    })
+    
+    # Apply text wrapping to summaries
+    df_plot['summary_wrapped'] = df_plot['summary_preview'].apply(lambda x: wrap_text(x, width=60))
+    
+    # Add count to category names
+    df_plot['category_with_count'] = df_plot['category'].apply(
+        lambda x: f"{x} ({category_counts[x]})"
+    )
+    
+    # Define vibrant colors for categories
+    color_map = {
         'Consumer Protection': '#1f77b4',
         'Antitrust': '#ff7f0e', 
         'IP Law': '#2ca02c',
@@ -93,36 +133,124 @@ def create_visualization(embedding, categories, titles):
         'AI in Legal Proceedings': '#7f7f7f'
     }
     
-    # Create single plot
-    fig, ax = plt.subplots(1, 1, figsize=(14, 10))
+    # Create the interactive scatter plot
+    fig = px.scatter(
+        df_plot,
+        x='x',
+        y='y',
+        color='category',
+        color_discrete_map=color_map,
+        hover_data={
+            'x': False,
+            'y': False,
+            'category': True,
+            'title': True,
+            'summary_preview': True
+        },
+        title='Interactive Legal Cases UMAP Visualization',
+        labels={
+            'x': 'UMAP Dimension 1',
+            'y': 'UMAP Dimension 2',
+            'category': 'Category'
+        }
+    )
     
-    # Plot colored by category
-    unique_categories = list(set(categories))
+    # Customize hover template with better formatting
+    fig.update_traces(
+        hovertemplate='<b>%{customdata[1]}</b><br><br>' +
+                      '<b>Category:</b> %{customdata[0]}<br><br>' +
+                      '<b>Summary:</b><br>%{customdata[2]}<br>' +
+                      '<extra></extra>',
+        customdata=np.column_stack((df_plot['category'], df_plot['title_wrapped'], df_plot['summary_wrapped'])),
+        marker=dict(size=8)  # Make points slightly larger for better visibility
+    )
     
-    for category in unique_categories:
-        mask = np.array(categories) == category
-        count = category_counts[category]
-        label_with_count = f"{category} ({count})"
-        
-        ax.scatter(
-            embedding[mask, 0], 
-            embedding[mask, 1],
-            c=category_colors.get(category, '#2C3E50'),
-            label=label_with_count,
-            alpha=0.7,
-            s=60
+    # Update layout for better appearance
+    fig.update_layout(
+        title={
+            'text': 'Interactive Legal Cases UMAP Visualization',
+            'x': 0.5,
+            'font': {'size': 24}
+        },
+        xaxis_title='UMAP Dimension 1',
+        yaxis_title='UMAP Dimension 2',
+        font=dict(size=12),  # Slightly smaller font
+        legend=dict(
+            title='Category (Count)',
+            orientation="v",
+            yanchor="top",
+            y=1,
+            xanchor="left",
+            x=1.02
+        ),
+        width=1200,
+        height=800,
+        margin=dict(r=200),  # Make room for legend
+        hoverlabel=dict(
+            bgcolor="white",
+            bordercolor="black",
+            font_size=10,
+            font_family="Arial",
+            align="left",
+            namelength=-1  # Show full text without truncation
         )
+    )
     
-    ax.set_title('Legal Cases UMAP - Colored by Category', fontsize=18, fontweight='bold')
-    ax.set_xlabel('UMAP Dimension 1', fontsize=14)
-    ax.set_ylabel('UMAP Dimension 2', fontsize=14)
-    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=11)
-    ax.grid(True, alpha=0.3)
+    # Update legend labels to include counts
+    for i, trace in enumerate(fig.data):
+        category = trace.name
+        count = category_counts[category]
+        trace.name = f"{category} ({count})"
     
-    plt.tight_layout()
-    # Remove plt.show() to avoid displaying the plot
+    # Save as HTML
+    fig.write_html(output_file)
+    print(f"Interactive visualization saved as '{output_file}'")
+    
+    # Show the plot
+    fig.show()
     
     return fig
+
+def create_github_pages_files(embedding, categories, titles, summaries):
+    """
+    Create files needed for GitHub Pages deployment
+    """
+    # Create the interactive visualization
+    fig = create_interactive_visualization(embedding, categories, titles, summaries, 'umap_index.html')
+    
+    # Create a simple README.md for GitHub Pages
+    readme_content = """# Legal Cases UMAP Visualization
+
+This is an interactive visualization of legal cases using UMAP (Uniform Manifold Approximation and Projection) dimensionality reduction.
+
+## How to Use
+- Hover over any point to see case details including title, category, and summary preview
+- Use the legend to filter categories on/off
+- Zoom and pan to explore different regions of the plot
+- Similar cases cluster together based on text similarity
+
+## About
+The visualization uses TF-IDF features extracted from case summaries and reduces them to 2D using UMAP for exploration and pattern discovery.
+
+## View the Visualization
+[Click here to view the interactive visualization](./index.html)
+"""
+    
+    with open('README.md', 'w') as f:
+        f.write(readme_content)
+    
+    print("Created README.md for GitHub Pages")
+    
+    # Create a simple _config.yml for GitHub Pages
+    config_content = """title: Legal Cases UMAP Visualization
+description: Interactive visualization of legal cases using UMAP dimensionality reduction
+theme: jekyll-theme-minimal
+"""
+    
+    with open('_umap_config.yml', 'w') as f:
+        f.write(config_content)
+    
+    print("Created _config.yml for GitHub Pages")
 
 def print_cluster_analysis(embedding, categories, titles):
     """
@@ -142,9 +270,9 @@ def print_cluster_analysis(embedding, categories, titles):
     print(f"  X: {embedding[:, 0].min():.2f} to {embedding[:, 0].max():.2f}")
     print(f"  Y: {embedding[:, 1].min():.2f} to {embedding[:, 1].max():.2f}")
 
-def main(json_file_path):
+def main(json_file_path, create_github_files=True):
     """
-    Main function to run the complete UMAP visualization pipeline
+    Main function to run the complete interactive UMAP visualization pipeline
     """
     print("Loading and processing data...")
     df, data = load_and_process_data(json_file_path)
@@ -165,27 +293,33 @@ def main(json_file_path):
     print("Performing UMAP dimensionality reduction...")
     embedding, reducer = perform_umap(features)
     
-    # Create visualization
-    print("Creating visualization...")
-    fig = create_visualization(embedding, categories, titles)
+    # Create interactive visualization
+    print("Creating interactive visualization...")
+    fig = create_interactive_visualization(embedding, categories, titles, summaries)
     
     # Print analysis
     print_cluster_analysis(embedding, categories, titles)
     
-    # Save the plot
-    fig.savefig('legal_cases_umap.png', dpi=300, bbox_inches='tight')
-    print("\nVisualization saved as 'legal_cases_umap.png'")
+    # Create GitHub Pages files if requested
+    if create_github_files:
+        print("\nCreating GitHub Pages files...")
+        create_github_pages_files(embedding, categories, titles, summaries)
+        print("\nTo deploy to GitHub Pages:")
+        print("1. Create a new repository on GitHub")
+        print("2. Upload index.html, README.md, and _config.yml")
+        print("3. Enable GitHub Pages in repository settings")
+        print("4. Your visualization will be available at: https://yourusername.github.io/yourreponame/")
     
-    return embedding, categories, titles
+    return embedding, categories, titles, fig
 
 # Example usage
 if __name__ == "__main__":
-    # Replace 'your_data.json' with the path to your JSON file
+    # Replace 'legal_cases.json' with the path to your JSON file
     json_file_path = 'legal_cases.json'
     
     try:
-        embedding, categories, titles = main(json_file_path)
-        print("UMAP visualization completed successfully!")
+        embedding, categories, titles, fig = main(json_file_path)
+        print("Interactive UMAP visualization completed successfully!")
         
     except FileNotFoundError:
         print(f"Error: Could not find the file '{json_file_path}'")
@@ -193,26 +327,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"An error occurred: {str(e)}")
 
-# Additional function to explore specific clusters interactively
-def explore_cluster(embedding, categories, titles, summaries, x_range, y_range):
-    """
-    Explore cases within a specific region of the UMAP plot
-    """
-    mask = ((embedding[:, 0] >= x_range[0]) & (embedding[:, 0] <= x_range[1]) &
-            (embedding[:, 1] >= y_range[0]) & (embedding[:, 1] <= y_range[1]))
-    
-    cluster_cases = np.where(mask)[0]
-    
-    print(f"\n=== Cases in region X:{x_range}, Y:{y_range} ===")
-    print(f"Found {len(cluster_cases)} cases")
-    
-    for i, case_idx in enumerate(cluster_cases[:10]):  # Show first 10
-        print(f"\n{i+1}. {titles[case_idx]}")
-        print(f"   Category: {categories[case_idx]}")
-        print(f"   Summary: {summaries[case_idx][:200]}...")
-        
-    if len(cluster_cases) > 10:
-        print(f"\n... and {len(cluster_cases) - 10} more cases")
-
 # Required packages (install with pip):
-# pip install numpy pandas matplotlib seaborn scikit-learn umap-learn
+# pip install numpy pandas plotly scikit-learn umap-learn

@@ -1,167 +1,41 @@
 import json
 import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.manifold import TSNE
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from sklearn.feature_extraction.text import TfidfVectorizer
-import seaborn as sns
+from sklearn.preprocessing import StandardScaler
+from sklearn.manifold import TSNE
 from collections import Counter
 
-def load_and_preprocess_data(json_file_path):
+def load_and_process_data(json_file_path):
     """
-    Load JSON data and extract summaries and categories
+    Load JSON data and process it for t-SNE visualization
     """
-    with open(json_file_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+    with open(json_file_path, 'r', encoding='utf-8') as file:
+        data = json.load(file)
     
-    # Debug: Print the structure to understand the format
-    print(f"Data type: {type(data)}")
+    # Convert to DataFrame for easier manipulation
+    df = pd.DataFrame(data)
     
-    # Handle different JSON structures
-    if isinstance(data, dict):
-        print("Data is a dictionary. Looking for the list of cases...")
-        print(f"Top-level keys: {list(data.keys())}")
-        
-        # Try to find the list of cases within the dictionary
-        cases_list = None
-        for key, value in data.items():
-            if isinstance(value, list) and len(value) > 0:
-                cases_list = value
-                print(f"Found cases list under key: '{key}'")
-                break
-        
-        if cases_list is None:
-            # If no list found, maybe each key is a case
-            cases_list = list(data.values())
-            print("Treating dictionary values as individual cases")
-        
-        data = cases_list
-    
-    elif isinstance(data, list):
-        print(f"Data is a list with {len(data)} items")
-    
-    # Show structure of first item
-    if len(data) > 0:
-        print(f"First item type: {type(data[0])}")
-        if isinstance(data[0], str):
-            print(f"First item (string): '{data[0][:200]}...'")
-            print(f"First item length: {len(data[0])}")
-            print(f"First item repr: {repr(data[0][:100])}")
-            
-            # Check if strings are empty or whitespace
-            non_empty_items = [item for item in data if item.strip()]
-            print(f"Non-empty items: {len(non_empty_items)} out of {len(data)}")
-            
-            if len(non_empty_items) > 0:
-                print(f"First non-empty item: {repr(non_empty_items[0][:200])}")
-                
-                # Try to parse each string as JSON
-                print("Attempting to parse strings as JSON...")
-                parsed_data = []
-                for i, item in enumerate(data[:5]):  # Show first 5 for debugging
-                    if item.strip():  # Only try non-empty strings
-                        try:
-                            parsed_item = json.loads(item)
-                            parsed_data.append(parsed_item)
-                            print(f"Successfully parsed item {i}")
-                        except json.JSONDecodeError as e:
-                            print(f"Failed to parse item {i}: {e}")
-                            print(f"Item content: {repr(item[:100])}")
-                            continue
-                    else:
-                        print(f"Skipping empty item {i}")
-                
-                # Parse all items if some succeeded
-                if len(parsed_data) > 0:
-                    parsed_data = []
-                    for item in data:
-                        if item.strip():
-                            try:
-                                parsed_item = json.loads(item)
-                                parsed_data.append(parsed_item)
-                            except json.JSONDecodeError:
-                                continue
-                
-                data = parsed_data
-                print(f"Successfully parsed {len(data)} JSON objects")
-                if len(data) > 0:
-                    print(f"First parsed item keys: {list(data[0].keys())}")
-                    print(f"First parsed item: {data[0]}")
-            else:
-                print("All items appear to be empty strings")
-                data = []
-        elif isinstance(data[0], dict):
-            print(f"First item keys: {list(data[0].keys())}")
-            print(f"First item sample: {str(data[0])[:300]}...")
-    
-    summaries = []
+    # Extract categories (handle nested structure)
     categories = []
-    titles = []
-    
     for case in data:
-        # Handle the case structure based on your sample
-        if isinstance(case, dict):
-            # Get title - try different possible field names
-            title = case.get('title') or case.get('pdftitleofcase') or case.get('name') or 'Unknown Title'
-            titles.append(title)
-            
-            # Get summary - try different possible field names  
-            summary = case.get('summary') or case.get('casesummary') or case.get('description') or 'No summary'
-            summaries.append(summary)
-            
-            # Get category
-            if 'category' in case:
-                cat_data = case['category']
-                if isinstance(cat_data, dict) and 'category' in cat_data:
-                    cat_list = cat_data['category']
-                    if isinstance(cat_list, list):
-                        categories.append(cat_list[0])
-                    else:
-                        categories.append(cat_list)
-                else:
-                    categories.append(str(cat_data))
-            else:
-                categories.append('Unknown Category')
+        if isinstance(case['category']['category'], list) and len(case['category']['category']) > 0:
+            categories.append(case['category']['category'][0])
         else:
-            print(f"Warning: Unexpected case format: {type(case)}")
+            categories.append('Unknown')
     
-    print(f"Processed {len(summaries)} cases")
-    print(f"Categories found: {set(categories)}")
+    df['main_category'] = categories
     
-    return summaries, categories, titles
+    return df, data
 
-def create_color_mapping():
+def create_text_features(summaries):
     """
-    Create a color mapping for each category
+    Create TF-IDF features from case summaries
     """
-    category_names = [
-        'Consumer Protection',
-        'Antitrust', 
-        'IP Law',
-        'Privacy and Data Protection',
-        'Tort',
-        'Justice and Equity',
-        'Unrelated',
-        'AI in Legal Proceedings'
-    ]
-    
-    # Use a colorblind-friendly palette
-    colors = [
-        '#1f77b4',  # blue
-        '#ff7f0e',  # orange
-        '#2ca02c',  # green
-        '#d62728',  # red
-        '#9467bd',  # purple  
-        '#8c564b',  # brown
-        '#e377c2',  # pink
-        '#7f7f7f'   # gray
-    ]
-    
-    return dict(zip(category_names, colors))
-
-def vectorize_summaries(summaries):
-    """
-    Convert text summaries to TF-IDF vectors
-    """
+    # Initialize TF-IDF vectorizer
     vectorizer = TfidfVectorizer(
         max_features=1000,
         stop_words='english',
@@ -170,128 +44,292 @@ def vectorize_summaries(summaries):
         max_df=0.8
     )
     
-    vectors = vectorizer.fit_transform(summaries)
-    return vectors.toarray(), vectorizer
+    # Fit and transform the summaries
+    tfidf_features = vectorizer.fit_transform(summaries)
+    
+    return tfidf_features.toarray(), vectorizer
 
-def perform_tsne(vectors, perplexity=30, random_state=42):
+def perform_tsne(features, perplexity=30, n_components=2, random_state=42):
     """
     Perform t-SNE dimensionality reduction
     """
+    # Standardize features
+    scaler = StandardScaler()
+    features_scaled = scaler.fit_transform(features)
+    
+    # Initialize t-SNE
     tsne = TSNE(
-        n_components=2,
-        perplexity=min(perplexity, len(vectors)-1),  # Ensure perplexity is valid
+        n_components=n_components,
+        perplexity=min(perplexity, len(features)-1),  # Ensure perplexity is valid
         random_state=random_state,
         init='pca',
-        n_iter=1000
+        n_iter=1000,
+        learning_rate='auto'
     )
     
-    embeddings = tsne.fit_transform(vectors)
-    return embeddings
+    # Fit and transform
+    embedding = tsne.fit_transform(features_scaled)
+    
+    return embedding, tsne
 
-def create_visualization(embeddings, categories, titles, color_mapping):
+def wrap_text(text, width=50):
     """
-    Create the t-SNE visualization with color coding
+    Wrap text to specified width for better display in hover boxes
     """
-    plt.figure(figsize=(15, 10))
+    words = text.split()
+    lines = []
+    current_line = []
+    current_length = 0
     
-    # Create scatter plot for each category
-    for category in color_mapping.keys():
-        mask = np.array(categories) == category
-        if np.any(mask):
-            plt.scatter(
-                embeddings[mask, 0], 
-                embeddings[mask, 1],
-                c=color_mapping[category],
-                label=f"{category} ({np.sum(mask)})",
-                alpha=0.7,
-                s=50
-            )
+    for word in words:
+        if current_length + len(word) + 1 <= width:
+            current_line.append(word)
+            current_length += len(word) + 1
+        else:
+            if current_line:
+                lines.append(' '.join(current_line))
+            current_line = [word]
+            current_length = len(word)
     
-    plt.title('t-SNE Visualization of Legal Cases by Category', fontsize=16, fontweight='bold')
-    plt.xlabel('t-SNE Component 1', fontsize=12)
-    plt.ylabel('t-SNE Component 2', fontsize=12)
+    if current_line:
+        lines.append(' '.join(current_line))
     
-    # Customize legend
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', frameon=True, 
-               fancybox=True, shadow=True)
-    
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    
-    return plt
+    return '<br>'.join(lines)
 
-def print_statistics(categories):
+def create_interactive_visualization(embedding, categories, titles, summaries, output_file='legal_cases_tsne_interactive.html'):
     """
-    Print basic statistics about the dataset
+    Create an interactive t-SNE visualization with hover information
     """
+    # Count cases per category
     category_counts = Counter(categories)
-    total_cases = len(categories)
     
-    print("Dataset Statistics:")
-    print(f"Total cases: {total_cases}")
-    print("\nCategory distribution:")
-    for category, count in category_counts.most_common():
-        percentage = (count / total_cases) * 100
-        print(f"  {category}: {count} ({percentage:.1f}%)")
+    # Create DataFrame for Plotly
+    df_plot = pd.DataFrame({
+        'x': embedding[:, 0],
+        'y': embedding[:, 1],
+        'category': categories,
+        'title': titles,
+        'summary': summaries,
+        'summary_preview': [s[:300] + '...' if len(s) > 300 else s for s in summaries],
+        'title_wrapped': [title[:80] + '...' if len(title) > 80 else title for title in titles]
+    })
+    
+    # Apply text wrapping to summaries
+    df_plot['summary_wrapped'] = df_plot['summary_preview'].apply(lambda x: wrap_text(x, width=60))
+    
+    # Add count to category names
+    df_plot['category_with_count'] = df_plot['category'].apply(
+        lambda x: f"{x} ({category_counts[x]})"
+    )
+    
+    # Define vibrant colors for categories
+    color_map = {
+        'Consumer Protection': '#1f77b4',
+        'Antitrust': '#ff7f0e', 
+        'IP Law': '#2ca02c',
+        'Privacy and Data Protection': '#d62728',
+        'Tort': '#9467bd',
+        'Justice and Equity': '#8c564b',
+        'Unrelated': '#e377c2',
+        'AI in Legal Proceedings': '#7f7f7f'
+    }
+    
+    # Create the interactive scatter plot
+    fig = px.scatter(
+        df_plot,
+        x='x',
+        y='y',
+        color='category',
+        color_discrete_map=color_map,
+        hover_data={
+            'x': False,
+            'y': False,
+            'category': True,
+            'title': True,
+            'summary_preview': True
+        },
+        title='Interactive Legal Cases t-SNE Visualization',
+        labels={
+            'x': 't-SNE Component 1',
+            'y': 't-SNE Component 2',
+            'category': 'Category'
+        }
+    )
+    
+    # Customize hover template with better formatting
+    fig.update_traces(
+        hovertemplate='<b>%{customdata[1]}</b><br><br>' +
+                      '<b>Category:</b> %{customdata[0]}<br><br>' +
+                      '<b>Summary:</b><br>%{customdata[2]}<br>' +
+                      '<extra></extra>',
+        customdata=np.column_stack((df_plot['category'], df_plot['title_wrapped'], df_plot['summary_wrapped'])),
+        marker=dict(size=8)  # Make points slightly larger for better visibility
+    )
+    
+    # Update layout for better appearance
+    fig.update_layout(
+        title={
+            'text': 'Interactive Legal Cases t-SNE Visualization',
+            'x': 0.5,
+            'font': {'size': 24}
+        },
+        xaxis_title='t-SNE Component 1',
+        yaxis_title='t-SNE Component 2',
+        font=dict(size=12),  # Slightly smaller font
+        legend=dict(
+            title='Category (Count)',
+            orientation="v",
+            yanchor="top",
+            y=1,
+            xanchor="left",
+            x=1.02
+        ),
+        width=1200,
+        height=800,
+        margin=dict(r=200),  # Make room for legend
+        hoverlabel=dict(
+            bgcolor="white",
+            bordercolor="black",
+            font_size=10,
+            font_family="Arial",
+            align="left",
+            namelength=-1  # Show full text without truncation
+        )
+    )
+    
+    # Update legend labels to include counts
+    for i, trace in enumerate(fig.data):
+        category = trace.name
+        count = category_counts[category]
+        trace.name = f"{category} ({count})"
+    
+    # Save as HTML
+    fig.write_html(output_file)
+    print(f"Interactive visualization saved as '{output_file}'")
+    
+    # Show the plot
+    fig.show()
+    
+    return fig
 
-def main(json_file_path, output_path=None, perplexity=30):
+def create_github_pages_files(embedding, categories, titles, summaries):
     """
-    Main function to run the t-SNE visualization
-    
-    Parameters:
-    json_file_path (str): Path to your JSON file
-    output_path (str): Optional path to save the plot
-    perplexity (int): t-SNE perplexity parameter (default: 30)
+    Create files needed for GitHub Pages deployment
     """
+    # Create the interactive visualization
+    fig = create_interactive_visualization(embedding, categories, titles, summaries, 'tsne_index.html')
     
-    print("Loading and preprocessing data...")
-    summaries, categories, titles = load_and_preprocess_data(json_file_path)
+    # Create a simple README.md for GitHub Pages
+    readme_content = """# Legal Cases t-SNE Visualization
+
+This is an interactive visualization of legal cases using t-SNE (t-Distributed Stochastic Neighbor Embedding) dimensionality reduction.
+
+## How to Use
+- Hover over any point to see case details including title, category, and summary preview
+- Use the legend to filter categories on/off
+- Zoom and pan to explore different regions of the plot
+- Similar cases cluster together based on text similarity
+
+## About
+The visualization uses TF-IDF features extracted from case summaries and reduces them to 2D using t-SNE for exploration and pattern discovery.
+
+## View the Visualization
+[Click here to view the interactive visualization](./index.html)
+"""
     
-    print("Creating color mapping...")
-    color_mapping = create_color_mapping()
+    with open('README.md', 'w') as f:
+        f.write(readme_content)
     
-    print("Vectorizing summaries...")
-    vectors, vectorizer = vectorize_summaries(summaries)
+    print("Created README.md for GitHub Pages")
     
-    print("Performing t-SNE...")
-    embeddings = perform_tsne(vectors, perplexity=perplexity)
+    # Create a simple _config.yml for GitHub Pages
+    config_content = """title: Legal Cases t-SNE Visualization
+description: Interactive visualization of legal cases using t-SNE dimensionality reduction
+theme: jekyll-theme-minimal
+"""
     
-    print("Creating visualization...")
-    plt = create_visualization(embeddings, categories, titles, color_mapping)
+    with open('_tsne_config.yml', 'w') as f:
+        f.write(config_content)
     
-    # Print statistics
-    print_statistics(categories)
+    print("Created _config.yml for GitHub Pages")
+
+def print_cluster_analysis(embedding, categories, titles):
+    """
+    Print basic analysis of the clusters
+    """
+    print("=== CLUSTER ANALYSIS ===")
+    print(f"Total cases: {len(categories)}")
+    print(f"Embedding shape: {embedding.shape}")
+    print("\nCategory distribution:")
     
-    # Save or show plot
-    if output_path:
-        plt.savefig(output_path, dpi=300, bbox_inches='tight')
-        print(f"Plot saved to: {output_path}")
-    else:
-        plt.show()
+    category_counts = Counter(categories)
+    for category, count in category_counts.most_common():
+        percentage = (count / len(categories)) * 100
+        print(f"  {category}: {count} cases ({percentage:.1f}%)")
     
-    return embeddings, categories, titles, vectorizer
+    print(f"\nt-SNE embedding range:")
+    print(f"  X: {embedding[:, 0].min():.2f} to {embedding[:, 0].max():.2f}")
+    print(f"  Y: {embedding[:, 1].min():.2f} to {embedding[:, 1].max():.2f}")
+
+def main(json_file_path, create_github_files=True, perplexity=30):
+    """
+    Main function to run the complete interactive t-SNE visualization pipeline
+    """
+    print("Loading and processing data...")
+    df, data = load_and_process_data(json_file_path)
+    
+    # Extract data for processing
+    summaries = [case['summary'] for case in data]
+    titles = [case['title'] for case in data]
+    categories = df['main_category'].tolist()
+    
+    print(f"Loaded {len(summaries)} cases")
+    
+    # Create text features
+    print("Creating TF-IDF features...")
+    features, vectorizer = create_text_features(summaries)
+    print(f"Created {features.shape[1]} features")
+    
+    # Perform t-SNE
+    print("Performing t-SNE dimensionality reduction...")
+    embedding, tsne_model = perform_tsne(features, perplexity=perplexity)
+    
+    # Create interactive visualization
+    print("Creating interactive visualization...")
+    fig = create_interactive_visualization(embedding, categories, titles, summaries)
+    
+    # Print analysis
+    print_cluster_analysis(embedding, categories, titles)
+    
+    # Create GitHub Pages files if requested
+    if create_github_files:
+        print("\nCreating GitHub Pages files...")
+        create_github_pages_files(embedding, categories, titles, summaries)
+        print("\nTo deploy to GitHub Pages:")
+        print("1. Create a new repository on GitHub")
+        print("2. Upload index.html, README.md, and _config.yml")
+        print("3. Enable GitHub Pages in repository settings")
+        print("4. Your visualization will be available at: https://yourusername.github.io/yourreponame/")
+    
+    return embedding, categories, titles, fig
 
 # Example usage
 if __name__ == "__main__":
-    # Replace with your actual JSON file path
-    json_file_path = "legal_cases.json"
+    # Replace 'legal_cases.json' with the path to your JSON file
+    json_file_path = 'legal_cases.json'
     
-    # Optional: specify output path to save the plot
-    output_path = "legal_cases_tsne_visualization.png"
-    
-    # Run the visualization
-    embeddings, categories, titles, vectorizer = main(
-        json_file_path=json_file_path,
-        output_path=output_path,
-        perplexity=10  # Better for ~50 cases
-    )
-    
-    # Optional: Print some example cases from each cluster
-    print("\nExample cases by category:")
-    unique_categories = list(set(categories))
-    for category in unique_categories[:3]:  # Show first 3 categories as examples
-        mask = np.array(categories) == category
-        example_titles = np.array(titles)[mask][:2]  # Show 2 examples
-        print(f"\n{category}:")
-        for title in example_titles:
-            print(f"  - {title}")
+    try:
+        embedding, categories, titles, fig = main(
+            json_file_path=json_file_path,
+            perplexity=10  # Better for ~50 cases
+        )
+        print("Interactive t-SNE visualization completed successfully!")
+        
+    except FileNotFoundError:
+        print(f"Error: Could not find the file '{json_file_path}'")
+        print("Please make sure the file exists and the path is correct.")
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+
+# Required packages (install with pip):
+# pip install numpy pandas plotly scikit-learn
