@@ -3,23 +3,20 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import StandardScaler
 from sklearn.manifold import TSNE
 from collections import Counter
+import textwrap
 
 def load_and_process_data(json_file_path):
-    """
-    Load JSON data and process it for t-SNE visualization
-    """
+    """Load JSON data and process it for t-SNE visualization"""
     with open(json_file_path, 'r', encoding='utf-8') as file:
         data = json.load(file)
     
-    # Convert to DataFrame for easier manipulation
     df = pd.DataFrame(data)
     
-    # Extract categories (handle nested structure)
+    # Extract categories
     categories = []
     for case in data:
         if isinstance(case['category']['category'], list) and len(case['category']['category']) > 0:
@@ -28,14 +25,10 @@ def load_and_process_data(json_file_path):
             categories.append('Unknown')
     
     df['main_category'] = categories
-    
     return df, data
 
 def create_text_features(summaries):
-    """
-    Create TF-IDF features from case summaries
-    """
-    # Initialize TF-IDF vectorizer
+    """Create TF-IDF features from case summaries"""
     vectorizer = TfidfVectorizer(
         max_features=1000,
         stop_words='english',
@@ -44,129 +37,103 @@ def create_text_features(summaries):
         max_df=0.8
     )
     
-    # Fit and transform the summaries
     tfidf_features = vectorizer.fit_transform(summaries)
-    
     return tfidf_features.toarray(), vectorizer
 
 def perform_tsne(features, perplexity=30, n_components=2, random_state=42):
-    """
-    Perform t-SNE dimensionality reduction
-    """
-    # Standardize features
+    """Perform t-SNE dimensionality reduction"""
     scaler = StandardScaler()
     features_scaled = scaler.fit_transform(features)
     
-    # Initialize t-SNE
     tsne = TSNE(
         n_components=n_components,
-        perplexity=min(perplexity, len(features)-1),  # Ensure perplexity is valid
+        perplexity=min(perplexity, len(features)-1),
         random_state=random_state,
         init='pca',
         n_iter=1000,
         learning_rate='auto'
     )
     
-    # Fit and transform
     embedding = tsne.fit_transform(features_scaled)
-    
     return embedding, tsne
 
-def wrap_text(text, width=50):
-    """
-    Wrap text to specified width for better display in hover boxes
-    """
-    words = text.split()
-    lines = []
-    current_line = []
-    current_length = 0
-    
-    for word in words:
-        if current_length + len(word) + 1 <= width:
-            current_line.append(word)
-            current_length += len(word) + 1
-        else:
-            if current_line:
-                lines.append(' '.join(current_line))
-            current_line = [word]
-            current_length = len(word)
-    
-    if current_line:
-        lines.append(' '.join(current_line))
-    
-    return '<br>'.join(lines)
+def wrap_text(text, width=60):
+    """Helper function to wrap text for better display"""
+    return '<br>'.join(textwrap.wrap(str(text), width=width))
 
 def create_interactive_visualization(embedding, categories, titles, summaries, output_file='legal_cases_tsne_interactive.html'):
-    """
-    Create an interactive t-SNE visualization with hover information
-    """
-    # Count cases per category
-    category_counts = Counter(categories)
+    """Create interactive t-SNE visualization with correct color mapping"""
     
-    # Create DataFrame for Plotly
+    # Clean categories
+    categories_cleaned = [c.strip() if isinstance(c, str) else 'Unknown' for c in categories]
+    
+    # Get unique base categories and assign colors
+    unique_base_categories = sorted(set(categories_cleaned))
+    
+    # Create color palette
+    colors = (px.colors.qualitative.Set3 + 
+             px.colors.qualitative.Bold + 
+             px.colors.qualitative.Dark24 + 
+             px.colors.qualitative.Pastel)
+    
+    # Map base categories to colors
+    base_color_map = {cat: colors[i % len(colors)] for i, cat in enumerate(unique_base_categories)}
+    
+    # Count occurrences of each category
+    category_counts = Counter(categories_cleaned)
+    
+    # Create display labels with counts
+    category_display = [f"{cat} ({category_counts[cat]})" for cat in categories_cleaned]
+    
+    # Create DataFrame
     df_plot = pd.DataFrame({
         'x': embedding[:, 0],
         'y': embedding[:, 1],
-        'category': categories,
+        'category_base': categories_cleaned,
+        'category_display': category_display,
         'title': titles,
         'summary': summaries,
         'summary_preview': [s[:300] + '...' if len(s) > 300 else s for s in summaries],
-        'title_wrapped': [title[:80] + '...' if len(title) > 80 else title for title in titles]
+        'title_wrapped': [t[:80] + '...' if len(t) > 80 else t for t in titles]
     })
     
-    # Apply text wrapping to summaries
+    # Wrap summary text
     df_plot['summary_wrapped'] = df_plot['summary_preview'].apply(lambda x: wrap_text(x, width=60))
     
-    # Add count to category names
-    df_plot['category_with_count'] = df_plot['category'].apply(
-        lambda x: f"{x} ({category_counts[x]})"
-    )
+    # Create empty figure
+    fig = go.Figure()
     
-    # Define vibrant colors for categories
-    color_map = {
-        'Consumer Protection': '#1f77b4',
-        'Antitrust': '#ff7f0e', 
-        'IP Law': '#2ca02c',
-        'Privacy and Data Protection': '#d62728',
-        'Tort': '#9467bd',
-        'Justice and Equity': '#8c564b',
-        'Unrelated': '#e377c2',
-        'AI in Legal Proceedings': '#7f7f7f'
-    }
+    # Add scatter trace for each category to ensure consistent colors
+    for i, category in enumerate(unique_base_categories):
+        mask = df_plot['category_base'] == category
+        category_data = df_plot[mask]
+        
+        if len(category_data) > 0:
+            count = category_counts[category]
+            
+            fig.add_trace(go.Scatter(
+                x=category_data['x'],
+                y=category_data['y'],
+                mode='markers',
+                marker=dict(
+                    color=base_color_map[category],
+                    size=8,
+                    line=dict(width=0.5, color='white')
+                ),
+                name=f"{category} ({count})",
+                legendgroup=category,
+                customdata=np.column_stack((
+                    category_data['category_display'],
+                    category_data['title_wrapped'],
+                    category_data['summary_wrapped']
+                )),
+                hovertemplate='<b>%{customdata[1]}</b><br><br>' +
+                              '<b>Category:</b> %{customdata[0]}<br><br>' +
+                              '<b>Summary:</b><br>%{customdata[2]}<br>' +
+                              '<extra></extra>'
+            ))
     
-    # Create the interactive scatter plot
-    fig = px.scatter(
-        df_plot,
-        x='x',
-        y='y',
-        color='category',
-        color_discrete_map=color_map,
-        hover_data={
-            'x': False,
-            'y': False,
-            'category': True,
-            'title': True,
-            'summary_preview': True
-        },
-        title='Interactive Legal Cases t-SNE Visualization',
-        labels={
-            'x': 't-SNE Component 1',
-            'y': 't-SNE Component 2',
-            'category': 'Category'
-        }
-    )
-    
-    # Customize hover template with better formatting
-    fig.update_traces(
-        hovertemplate='<b>%{customdata[1]}</b><br><br>' +
-                      '<b>Category:</b> %{customdata[0]}<br><br>' +
-                      '<b>Summary:</b><br>%{customdata[2]}<br>' +
-                      '<extra></extra>',
-        customdata=np.column_stack((df_plot['category'], df_plot['title_wrapped'], df_plot['summary_wrapped'])),
-        marker=dict(size=8)  # Make points slightly larger for better visibility
-    )
-    
-    # Update layout for better appearance
+    # Update layout
     fig.update_layout(
         title={
             'text': 'Interactive Legal Cases t-SNE Visualization',
@@ -175,88 +142,45 @@ def create_interactive_visualization(embedding, categories, titles, summaries, o
         },
         xaxis_title='t-SNE Component 1',
         yaxis_title='t-SNE Component 2',
-        font=dict(size=12),  # Slightly smaller font
+        font=dict(size=12),
         legend=dict(
             title='Category (Count)',
             orientation="v",
             yanchor="top",
             y=1,
             xanchor="left",
-            x=1.02
+            x=1.02,
+            bgcolor='rgba(255,255,255,0.8)',
+            bordercolor='black',
+            borderwidth=1
         ),
         width=1200,
         height=800,
-        margin=dict(r=200),  # Make room for legend
+        margin=dict(r=250),
         hoverlabel=dict(
             bgcolor="white",
             bordercolor="black",
-            font_size=10,
+            font_size=11,
             font_family="Arial",
-            align="left",
-            namelength=-1  # Show full text without truncation
-        )
+            align="left"
+        ),
+        plot_bgcolor='white',
+        paper_bgcolor='white'
     )
     
-    # Update legend labels to include counts
-    for i, trace in enumerate(fig.data):
-        category = trace.name
-        count = category_counts[category]
-        trace.name = f"{category} ({count})"
+    # Add grid
+    fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
+    fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
     
-    # Save as HTML
+    # Save and show
     fig.write_html(output_file)
-    print(f"Interactive visualization saved as '{output_file}'")
-    
-    # Show the plot
+    print(f"Interactive visualization saved to: {output_file}")
     fig.show()
     
     return fig
 
-def create_github_pages_files(embedding, categories, titles, summaries):
-    """
-    Create files needed for GitHub Pages deployment
-    """
-    # Create the interactive visualization
-    fig = create_interactive_visualization(embedding, categories, titles, summaries, 'tsne_index.html')
-    
-    # Create a simple README.md for GitHub Pages
-    readme_content = """# Legal Cases t-SNE Visualization
-
-This is an interactive visualization of legal cases using t-SNE (t-Distributed Stochastic Neighbor Embedding) dimensionality reduction.
-
-## How to Use
-- Hover over any point to see case details including title, category, and summary preview
-- Use the legend to filter categories on/off
-- Zoom and pan to explore different regions of the plot
-- Similar cases cluster together based on text similarity
-
-## About
-The visualization uses TF-IDF features extracted from case summaries and reduces them to 2D using t-SNE for exploration and pattern discovery.
-
-## View the Visualization
-[Click here to view the interactive visualization](./index.html)
-"""
-    
-    with open('README.md', 'w') as f:
-        f.write(readme_content)
-    
-    print("Created README.md for GitHub Pages")
-    
-    # Create a simple _config.yml for GitHub Pages
-    config_content = """title: Legal Cases t-SNE Visualization
-description: Interactive visualization of legal cases using t-SNE dimensionality reduction
-theme: jekyll-theme-minimal
-"""
-    
-    with open('_tsne_config.yml', 'w') as f:
-        f.write(config_content)
-    
-    print("Created _config.yml for GitHub Pages")
-
 def print_cluster_analysis(embedding, categories, titles):
-    """
-    Print basic analysis of the clusters
-    """
+    """Print basic analysis of the clusters"""
     print("=== CLUSTER ANALYSIS ===")
     print(f"Total cases: {len(categories)}")
     print(f"Embedding shape: {embedding.shape}")
@@ -271,10 +195,8 @@ def print_cluster_analysis(embedding, categories, titles):
     print(f"  X: {embedding[:, 0].min():.2f} to {embedding[:, 0].max():.2f}")
     print(f"  Y: {embedding[:, 1].min():.2f} to {embedding[:, 1].max():.2f}")
 
-def main(json_file_path, create_github_files=True, perplexity=30):
-    """
-    Main function to run the complete interactive t-SNE visualization pipeline
-    """
+def main(json_file_path, perplexity=30):
+    """Main function to run the complete interactive t-SNE visualization pipeline"""
     print("Loading and processing data...")
     df, data = load_and_process_data(json_file_path)
     
@@ -301,27 +223,16 @@ def main(json_file_path, create_github_files=True, perplexity=30):
     # Print analysis
     print_cluster_analysis(embedding, categories, titles)
     
-    # Create GitHub Pages files if requested
-    if create_github_files:
-        print("\nCreating GitHub Pages files...")
-        create_github_pages_files(embedding, categories, titles, summaries)
-        print("\nTo deploy to GitHub Pages:")
-        print("1. Create a new repository on GitHub")
-        print("2. Upload index.html, README.md, and _config.yml")
-        print("3. Enable GitHub Pages in repository settings")
-        print("4. Your visualization will be available at: https://yourusername.github.io/yourreponame/")
-    
     return embedding, categories, titles, fig
 
 # Example usage
 if __name__ == "__main__":
-    # Replace 'legal_cases.json' with the path to your JSON file
-    json_file_path = 'legal_cases.json'
+    json_file_path = 'classify_results.json'
     
     try:
         embedding, categories, titles, fig = main(
             json_file_path=json_file_path,
-            perplexity=10  # Better for ~50 cases
+            perplexity=10  # Better for smaller datasets
         )
         print("Interactive t-SNE visualization completed successfully!")
         
@@ -331,5 +242,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"An error occurred: {str(e)}")
 
-# Required packages (install with pip):
+# Required packages:
 # pip install numpy pandas plotly scikit-learn
