@@ -15,18 +15,9 @@ def parse_case_metadata(metadata_string, count):
     try:
         # Extract JSON from the markdown code block
         json_match = re.search(r'```json\n(.*?)\n```', metadata_string, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(1)
-            metadata = json.loads(json_str)
-            return metadata
-        else:
-            print("COUNT: ", count)
-            print(f"Warning: Could not extract JSON from: {metadata_string[:100]}...")
-            return {"ai_material": False, "category": ["Unknown"]}
-    except json.JSONDecodeError as e:
-        print("COUNT: ", count)
-        print(f"Warning: Could not parse JSON metadata: {e}")
-        return {"ai_material": False, "category": ["Unknown"]}
+        json_str = json_match.group(1)
+        metadata = json.loads(json_str)
+        return metadata
     except Exception as e:
         print("COUNT: ", count)
         print(f"Warning: Error processing metadata: {e}")
@@ -63,18 +54,10 @@ def load_and_process_data(json_file_path):
 def create_text_features(summaries):
     """Create TF-IDF features from case summaries (titles in this case)"""
     # Clean and prepare text for TF-IDF
-    cleaned_summaries = []
-    for summary in summaries:
-        # Remove common legal case formatting and focus on meaningful words
-        cleaned = re.sub(r'\b(v\.?|vs\.?)\b', ' ', summary)  # Remove "v." or "vs."
-        cleaned = re.sub(r'\([^)]*\)', '', cleaned)  # Remove parentheses content
-        cleaned = re.sub(r'[^\w\s]', ' ', cleaned)  # Remove special characters
-        cleaned = re.sub(r'\s+', ' ', cleaned).strip()  # Normalize whitespace
-        cleaned_summaries.append(cleaned)
-    
+    cleaned_summaries = []    
     vectorizer = TfidfVectorizer(
         max_features=500,  # Reduced since we're working with case names
-        stop_words='english',
+        stop_words=None,
         ngram_range=(1, 3),  # Include more n-grams for case names
         min_df=1,  # Allow single occurrences
         max_df=0.9
