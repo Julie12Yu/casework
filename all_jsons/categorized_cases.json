@@ -289,7 +289,7 @@
   "2022-05-26_USCOURTS-flsd-1_21-cv-23472_Birmingham et al v. Rofx.net et al.pdf": "```json\n{\"ai_material\": true, \"category\": [\"Consumer Protection\"]}\n```",
   "2023-09-06_USCOURTS-tnwd-2_22-cv-02838_Pritchard v. Thompson et al.pdf": "```json\n{\"ai_material\": true, \"category\": [\"IP Law\"]}\n```",
   "2022-03-18_USCOURTS-ilnd-1_21-cv-00135_In Re_ Clearview AI_ Inc._ Consumer Privacy Litigation.pdf": "```json\n{\"ai_material\": true, \"category\": [\"Privacy and Data Protection\"]}\n```",
-  "2025-04-08_USCOURTS-gamd-5_24-cv-00388_GORDON v. WELLS FARGO BANKS NA INC.pdf": "```json\n{\"ai_material\": true, \"category\": [\"AI in Legal Proceedings\", \"Tort\"]}.\n```",
+  "2025-04-08_USCOURTS-gamd-5_24-cv-00388_GORDON v. WELLS FARGO BANKS NA INC.pdf": "```json\n{\"ai_material\": true, \"category\": [\"AI in Legal Proceedings\", \"Tort\"]}\n```",
   "2022-11-18_USCOURTS-cand-3_19-cv-05602_Risher v. Adecco Inc. et al.pdf": "```json\n{\"ai_material\": true, \"category\": [\"Consumer Protection\", \"Privacy and Data Protection\"]}",
   "2025-06-06_USCOURTS-mied-2_24-cv-11974_Perkins v. The Alcove Troy et al.pdf": "```json\n{\"ai_material\": true, \"category\": [\"Justice and Equity\"]} \n```",
   "2018-02-22_USCOURTS-gand-1_17-cv-04851_Zelt et al v. Xytex Corporation et al.pdf": "```json\n{\"ai_material\": false, \"category\": [\"Unrelated\"]}\n```",
