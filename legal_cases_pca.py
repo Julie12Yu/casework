@@ -11,7 +11,7 @@ import textwrap
 import re
 
 DIR_PATH = 'all_jsons/categorized_cases.json'
-NUM_COMPONENTS = 15 # range is 5 to 100
+NUM_COMPONENTS = None
 
 def parse_case_metadata(metadata_string, count):
     """Parse the JSON metadata from the case value string"""
