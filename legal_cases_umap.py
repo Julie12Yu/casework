@@ -10,7 +10,7 @@ from collections import Counter
 import textwrap
 import re
 
-def parse_case_metadata(metadata_string):
+def parse_case_metadata(metadata_string, count):
     """Parse the JSON metadata from the case value string"""
     try:
         # Extract JSON from the markdown code block
@@ -20,12 +20,15 @@ def parse_case_metadata(metadata_string):
             metadata = json.loads(json_str)
             return metadata
         else:
+            print("COUNT: ", count)
             print(f"Warning: Could not extract JSON from: {metadata_string[:100]}...")
             return {"ai_material": False, "category": ["Unknown"]}
     except json.JSONDecodeError as e:
+        print("COUNT: ", count)
         print(f"Warning: Could not parse JSON metadata: {e}")
         return {"ai_material": False, "category": ["Unknown"]}
     except Exception as e:
+        print("COUNT: ", count)
         print(f"Warning: Error processing metadata: {e}")
         return {"ai_material": False, "category": ["Unknown"]}
 
@@ -36,8 +39,10 @@ def load_and_process_data(json_file_path):
     
     # Process the new format
     processed_cases = []
+    total = 0
     for casename, metadata_string in data.items():
-        metadata = parse_case_metadata(metadata_string)
+        total += 1
+        metadata = parse_case_metadata(metadata_string, total)
         
         # Extract main category
         categories = metadata.get('category', ['Unknown'])
@@ -286,7 +291,7 @@ def main(json_file_path):
 
 # Example usage
 if __name__ == "__main__":
-    json_file_path = 'categorized_cases.json'
+    json_file_path = 'all_jsons/categorized_cases.json'
     
     try:
         embedding, categories, titles, fig = main(json_file_path)
