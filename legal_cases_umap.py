@@ -10,6 +10,8 @@ from collections import Counter
 import textwrap
 import re
 
+DIR_PATH = 'all_jsons/categorized_cases.json'
+
 def parse_case_metadata(metadata_string, count):
     """Parse the JSON metadata from the case value string"""
     try:
@@ -23,9 +25,9 @@ def parse_case_metadata(metadata_string, count):
         print(f"Warning: Error processing metadata: {e}")
         return {"ai_material": False, "category": ["Unknown"]}
 
-def load_and_process_data(json_file_path):
+def load_and_process_data():
     """Load JSON data and process it for UMAP visualization"""
-    with open(json_file_path, 'r', encoding='utf-8') as file:
+    with open(DIR_PATH, 'r', encoding='utf-8') as file:
         data = json.load(file)
     
     # Process the new format
@@ -86,9 +88,6 @@ def perform_umap(features, n_neighbors=15, min_dist=0.1, n_components=2, random_
     reducer = UMAP(
         n_neighbors=n_neighbors,
         min_dist=min_dist,
-        n_components=n_components,
-        random_state=random_state,
-        metric='cosine'
     )
     
     embedding = reducer.fit_transform(features_scaled)
@@ -240,10 +239,10 @@ def print_cluster_analysis(embedding, categories, titles, ai_materials):
     print(f"  X: {embedding[:, 0].min():.2f} to {embedding[:, 0].max():.2f}")
     print(f"  Y: {embedding[:, 1].min():.2f} to {embedding[:, 1].max():.2f}")
 
-def main(json_file_path):
+def main():
     """Main function to run the complete interactive UMAP visualization pipeline"""
     print("Loading and processing data...")
-    df, processed_cases = load_and_process_data(json_file_path)
+    df, processed_cases = load_and_process_data(DIR_PATH)
     
     # Extract data for processing
     titles = [case['title'] for case in processed_cases]
@@ -274,19 +273,10 @@ def main(json_file_path):
 
 # Example usage
 if __name__ == "__main__":
-    json_file_path = 'all_jsons/categorized_cases.json'
-    
     try:
-        embedding, categories, titles, fig = main(json_file_path)
+        embedding, categories, titles, fig = main()
         print("Interactive UMAP visualization completed successfully!")
         
     except FileNotFoundError:
-        print(f"Error: Could not find the file '{json_file_path}'")
+        print(f"Error: Could not find the file '{DIR_PATH}'")
         print("Please make sure the file exists and the path is correct.")
-    except Exception as e:
-        print(f"An error occurred: {str(e)}")
-        import traceback
-        traceback.print_exc()
-
-# Required packages:
-# pip install numpy pandas plotly scikit-learn umap-learn

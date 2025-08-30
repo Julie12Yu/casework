@@ -8,24 +8,50 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.manifold import TSNE
 from collections import Counter
 import textwrap
+import re
 
-def load_and_process_data(json_file_path):
-    """Load JSON data and process it for t-SNE visualization"""
-    with open(json_file_path, 'r', encoding='utf-8') as file:
+DIR_PATH = 'all_jsons/categorized_cases.json'
+PERPLEXITY = 15 # range is 5 to 100
+
+def parse_case_metadata(metadata_string, count):
+    """Parse the JSON metadata from the case value string"""
+    try:
+        # Extract JSON from the markdown code block
+        json_match = re.search(r'```json\n(.*?)\n```', metadata_string, re.DOTALL)
+        json_str = json_match.group(1)
+        metadata = json.loads(json_str)
+        return metadata
+    except Exception as e:
+        print("COUNT: ", count)
+        print(f"Warning: Error processing metadata: {e}")
+        return {"ai_material": False, "category": ["Unknown"]}
+
+def load_and_process_data():
+    with open(DIR_PATH, 'r', encoding='utf-8') as file:
         data = json.load(file)
     
-    df = pd.DataFrame(data)
+    # Process the new format
+    processed_cases = []
+    total = 0
+    for casename, metadata_string in data.items():
+        total += 1
+        metadata = parse_case_metadata(metadata_string, total)
+        
+        # Extract main category
+        categories = metadata.get('category', ['Unknown'])
+        main_category = categories[0] if isinstance(categories, list) and len(categories) > 0 else 'Unknown'
+        
+        case_info = {
+            'title': casename,
+            'summary': casename,  # Using casename as summary since no separate summary is provided
+            'main_category': main_category,
+            'ai_material': metadata.get('ai_material', False),
+            'all_categories': categories
+        }
+        processed_cases.append(case_info)
     
-    # Extract categories
-    categories = []
-    for case in data:
-        if isinstance(case['category']['category'], list) and len(case['category']['category']) > 0:
-            categories.append(case['category']['category'][0])
-        else:
-            categories.append('Unknown')
-    
-    df['main_category'] = categories
-    return df, data
+    df = pd.DataFrame(processed_cases)
+    return df, processed_cases
 
 def create_text_features(summaries):
     """Create TF-IDF features from case summaries"""
@@ -195,10 +221,10 @@ def print_cluster_analysis(embedding, categories, titles):
     print(f"  X: {embedding[:, 0].min():.2f} to {embedding[:, 0].max():.2f}")
     print(f"  Y: {embedding[:, 1].min():.2f} to {embedding[:, 1].max():.2f}")
 
-def main(json_file_path, perplexity=30):
+def main():
     """Main function to run the complete interactive t-SNE visualization pipeline"""
     print("Loading and processing data...")
-    df, data = load_and_process_data(json_file_path)
+    df, data = load_and_process_data()
     
     # Extract data for processing
     summaries = [case['summary'] for case in data]
@@ -214,7 +240,7 @@ def main(json_file_path, perplexity=30):
     
     # Perform t-SNE
     print("Performing t-SNE dimensionality reduction...")
-    embedding, tsne_model = perform_tsne(features, perplexity=perplexity)
+    embedding, tsne_model = perform_tsne(features, perplexity=PERPLEXITY)
     
     # Create interactive visualization
     print("Creating interactive visualization...")
@@ -226,21 +252,11 @@ def main(json_file_path, perplexity=30):
     return embedding, categories, titles, fig
 
 # Example usage
-if __name__ == "__main__":
-    json_file_path = 'classify_results.json'
-    
+if __name__ == "__main__":    
     try:
-        embedding, categories, titles, fig = main(
-            json_file_path=json_file_path,
-            perplexity=10  # Better for smaller datasets
-        )
+        main()
         print("Interactive t-SNE visualization completed successfully!")
         
     except FileNotFoundError:
-        print(f"Error: Could not find the file '{json_file_path}'")
+        print(f"Error: Could not find the file '{DIR_PATH}'")
         print("Please make sure the file exists and the path is correct.")
-    except Exception as e:
-        print(f"An error occurred: {str(e)}")
-
-# Required packages:
-# pip install numpy pandas plotly scikit-learn
