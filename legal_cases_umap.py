@@ -11,6 +11,8 @@ import textwrap
 import re
 
 DIR_PATH = 'all_jsons/categorized_cases.json'
+MIN_DIST = 0.2
+N_NEIGHBORS = 13
 
 def parse_case_metadata(metadata_string, count):
     """Parse the JSON metadata from the case value string"""
@@ -76,18 +78,18 @@ def create_text_features(summaries):
         char_features = char_vectorizer.fit_transform(summaries)
         return char_features.toarray(), char_vectorizer
 
-def perform_umap(features, n_neighbors=15, min_dist=0.1, n_components=2, random_state=42):
+def perform_umap(features):
     """Perform UMAP dimensionality reduction"""
     # Adjust parameters based on dataset size
     n_samples = features.shape[0]
-    n_neighbors = min(n_neighbors, max(2, n_samples - 1))
+    n_neighbors = min(N_NEIGHBORS, max(2, n_samples - 1))
     
     scaler = StandardScaler()
     features_scaled = scaler.fit_transform(features)
     
     reducer = UMAP(
         n_neighbors=n_neighbors,
-        min_dist=min_dist,
+        min_dist=MIN_DIST,
     )
     
     embedding = reducer.fit_transform(features_scaled)
@@ -242,7 +244,7 @@ def print_cluster_analysis(embedding, categories, titles, ai_materials):
 def main():
     """Main function to run the complete interactive UMAP visualization pipeline"""
     print("Loading and processing data...")
-    df, processed_cases = load_and_process_data(DIR_PATH)
+    df, processed_cases = load_and_process_data()
     
     # Extract data for processing
     titles = [case['title'] for case in processed_cases]

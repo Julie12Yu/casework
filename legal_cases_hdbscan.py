@@ -12,8 +12,11 @@ import textwrap
 import re
 
 DIR_PATH = 'all_jsons/categorized_cases.json'
-MIN_CLUSTER_SIZE = 5
-MIN_SAMPLES = 5
+MIN_CLUSTER_SIZE = 13
+MIN_SAMPLES = 2
+
+MIN_DIST = 0.2
+N_NEIGHBORS = 13
 
 # WE ARE UMAPPING BEFORE HDBSCAN. UMAP > TSNE RAHHH
 IS_UMAP = True
@@ -71,38 +74,76 @@ def create_text_features(summaries):
     tfidf_features = vectorizer.fit_transform(summaries)
     return tfidf_features.toarray(), vectorizer
 
-def perform_HDBSCAN(features):
-    """Perform HDBSCAN dimensionality reduction"""
+def perform_clustering_and_embedding(features):
+    """Perform UMAP + HDBSCAN clustering and return both embedding and cluster labels"""
     scaler = StandardScaler()
     features_scaled = scaler.fit_transform(features)
     
+    # Step 1: UMAP for dimensionality reduction (optional but often helps HDBSCAN)
+    embeddings_for_clustering = features_scaled
+    
+    if IS_UMAP:
+        n_samples = features.shape[0]    
+        n_neighbors = min(N_NEIGHBORS, max(2, n_samples - 1))
+        reducer = umap.UMAP(
+            n_neighbors=n_neighbors,
+            min_dist=MIN_DIST,
+            n_components=10,  # Reduce to 10D for clustering, not 2D
+            random_state=42
+        )
+        embeddings_for_clustering = reducer.fit_transform(features_scaled)
+    
+    # Step 2: HDBSCAN clustering on the reduced features
     clusterer = hdbscan.HDBSCAN(
         min_cluster_size=MIN_CLUSTER_SIZE,
         min_samples=MIN_SAMPLES,
+        metric='euclidean',
+        cluster_selection_method='eom'
     )
-    reducer = None
+    cluster_labels = clusterer.fit_predict(embeddings_for_clustering)
+    
+    # Step 3: Create 2D embedding for visualization
     if IS_UMAP:
-        clusterer.set_params(metric='euclidean', cluster_selection_method='eom')
-        reducer = umap.UMAP(n_neighbors=15, min_dist=0.1, n_components=2, random_state=42) ### Make sure we make this slider later
-
-    embeddings = reducer.fit_transform(features_scaled)
-    clusterer = hdbscan.HDBSCAN(MIN_CLUSTER_SIZE, MIN_SAMPLES)
-    clusterer.fit(embeddings)
-
-    return embeddings
+        viz_reducer = umap.UMAP(
+            n_neighbors=n_neighbors,
+            min_dist=MIN_DIST,
+            n_components=2,  # 2D for visualization
+            random_state=42
+        )
+        embedding_2d = viz_reducer.fit_transform(features_scaled)
+    else:
+        # If not using UMAP, use first 2 components of scaled features
+        embedding_2d = features_scaled[:, :2]
+    
+    return embedding_2d, cluster_labels, clusterer
 
 def wrap_text(text, width=60):
     """Helper function to wrap text for better display"""
     return '<br>'.join(textwrap.wrap(str(text), width=width))
 
-def create_interactive_visualization(embedding, categories, titles, summaries, output_file='legal_cases_hdbscan_interactive.html'):
-    """Create interactive HDBSCAN visualization with correct color mapping"""
+def create_interactive_visualization(embedding, cluster_labels, original_categories, titles, summaries, output_file='legal_cases_hdbscan_interactive.html'):
+    """Create interactive HDBSCAN visualization showing discovered clusters"""
     
-    # Clean categories
-    categories_cleaned = [c.strip() if isinstance(c, str) else 'Unknown' for c in categories]
+    # Process cluster labels
+    unique_clusters = sorted(set(cluster_labels))
+    n_clusters = len([c for c in unique_clusters if c != -1])
+    n_noise = sum(1 for c in cluster_labels if c == -1)
     
-    # Get unique base categories and assign colors
-    unique_base_categories = sorted(set(categories_cleaned))
+    print(f"HDBSCAN found {n_clusters} clusters and {n_noise} noise points")
+    
+    # Create cluster names
+    cluster_names = []
+    for label in cluster_labels:
+        if label == -1:
+            cluster_names.append("Noise")
+        else:
+            cluster_names.append(f"Cluster {label}")
+    
+    # Count cluster sizes
+    cluster_counts = Counter(cluster_names)
+    
+    # Create display labels with counts
+    cluster_display = [f"{name} ({cluster_counts[name]})" for name in cluster_names]
     
     # Create color palette
     colors = (px.colors.qualitative.Set3 + 
@@ -110,21 +151,23 @@ def create_interactive_visualization(embedding, categories, titles, summaries, o
              px.colors.qualitative.Dark24 + 
              px.colors.qualitative.Pastel)
     
-    # Map base categories to colors
-    base_color_map = {cat: colors[i % len(colors)] for i, cat in enumerate(unique_base_categories)}
-    
-    # Count occurrences of each category
-    category_counts = Counter(categories_cleaned)
-    
-    # Create display labels with counts
-    category_display = [f"{cat} ({category_counts[cat]})" for cat in categories_cleaned]
+    # Map clusters to colors (noise gets gray)
+    cluster_color_map = {}
+    color_idx = 0
+    for cluster in sorted(unique_clusters):
+        if cluster == -1:
+            cluster_color_map[f"Noise"] = 'lightgray'
+        else:
+            cluster_color_map[f"Cluster {cluster}"] = colors[color_idx % len(colors)]
+            color_idx += 1
     
     # Create DataFrame
     df_plot = pd.DataFrame({
         'x': embedding[:, 0],
         'y': embedding[:, 1],
-        'category_base': categories_cleaned,
-        'category_display': category_display,
+        'cluster_name': cluster_names,
+        'cluster_display': cluster_display,
+        'original_category': original_categories,
         'title': titles,
         'summary': summaries,
         'summary_preview': [s[:300] + '...' if len(s) > 300 else s for s in summaries],
@@ -137,42 +180,55 @@ def create_interactive_visualization(embedding, categories, titles, summaries, o
     # Create empty figure
     fig = go.Figure()
     
-    # Add scatter trace for each category to ensure consistent colors
-    for i, category in enumerate(unique_base_categories):
-        mask = df_plot['category_base'] == category
-        category_data = df_plot[mask]
+    # Add scatter trace for each cluster
+    for cluster_name in sorted(set(cluster_names)):
+        mask = df_plot['cluster_name'] == cluster_name
+        cluster_data = df_plot[mask]
         
-        if len(category_data) > 0:
-            count = category_counts[category]
+        if len(cluster_data) > 0:
+            count = cluster_counts[cluster_name]
             
-            fig.add_trace(go.Scatter(
-                x=category_data['x'],
-                y=category_data['y'],
-                mode='markers',
-                marker=dict(
-                    color=base_color_map[category],
+            # Special styling for noise points
+            if cluster_name == "Noise":
+                marker_dict = dict(
+                    color='lightgray',
+                    size=6,
+                    opacity=0.6,
+                    line=dict(width=0.5, color='darkgray')
+                )
+            else:
+                marker_dict = dict(
+                    color=cluster_color_map[cluster_name],
                     size=8,
                     line=dict(width=0.5, color='white')
-                ),
-                name=f"{category} ({count})",
-                legendgroup=category,
+                )
+            
+            fig.add_trace(go.Scatter(
+                x=cluster_data['x'],
+                y=cluster_data['y'],
+                mode='markers',
+                marker=marker_dict,
+                name=f"{cluster_name} ({count})",
+                legendgroup=cluster_name,
                 customdata=np.column_stack((
-                    category_data['category_display'],
-                    category_data['title_wrapped'],
-                    category_data['summary_wrapped']
+                    cluster_data['cluster_display'],
+                    cluster_data['original_category'],
+                    cluster_data['title_wrapped'],
+                    cluster_data['summary_wrapped']
                 )),
-                hovertemplate='<b>%{customdata[1]}</b><br><br>' +
-                              '<b>Category:</b> %{customdata[0]}<br><br>' +
-                              '<b>Summary:</b><br>%{customdata[2]}<br>' +
+                hovertemplate='<b>%{customdata[2]}</b><br><br>' +
+                              '<b>Discovered Cluster:</b> %{customdata[0]}<br>' +
+                              '<b>Original Category:</b> %{customdata[1]}<br><br>' +
+                              '<b>Summary:</b><br>%{customdata[3]}<br>' +
                               '<extra></extra>'
             ))
     
     # Update layout
-    title_text = 'Interactive Legal Cases HDBSCAN Visualization'
+    title_text = f'HDBSCAN Clustering Results ({n_clusters} clusters, {n_noise} noise points)'
     if IS_UMAP:
-        title_text += ' (with UMAP)'
+        title_text += ' - UMAP + HDBSCAN'
     else:
-        title_text += ' (with TSNE)'
+        title_text += ' - HDBSCAN only'
 
     fig.update_layout(
         title={
@@ -180,11 +236,11 @@ def create_interactive_visualization(embedding, categories, titles, summaries, o
             'x': 0.5,
             'font': {'size': 24}
         },
-        xaxis_title='HDBSCAN Component 1',
-        yaxis_title='HDBSCAN Component 2',
+        xaxis_title='UMAP Component 1' if IS_UMAP else 'Component 1',
+        yaxis_title='UMAP Component 2' if IS_UMAP else 'Component 2',
         font=dict(size=12),
         legend=dict(
-            title='Category (Count)',
+            title='Discovered Clusters',
             orientation="v",
             yanchor="top",
             y=1,
@@ -219,24 +275,47 @@ def create_interactive_visualization(embedding, categories, titles, summaries, o
     
     return fig
 
-def print_cluster_analysis(embedding, categories, titles):
-    """Print basic analysis of the clusters"""
+def analyze_clusters(cluster_labels, original_categories, titles):
+    """Analyze the discovered clusters vs original categories"""
     print("=== CLUSTER ANALYSIS ===")
-    print(f"Total cases: {len(categories)}")
-    print(f"Embedding shape: {embedding.shape}")
-    print("\nCategory distribution:")
     
-    category_counts = Counter(categories)
+    unique_clusters = sorted(set(cluster_labels))
+    n_clusters = len([c for c in unique_clusters if c != -1])
+    n_noise = sum(1 for c in cluster_labels if c == -1)
+    
+    print(f"HDBSCAN Results:")
+    print(f"  - Found {n_clusters} clusters")
+    print(f"  - {n_noise} points classified as noise")
+    print(f"  - Total points: {len(cluster_labels)}")
+    
+    print(f"\nCluster sizes:")
+    cluster_counts = Counter(cluster_labels)
+    for cluster_id in sorted(cluster_counts.keys()):
+        if cluster_id == -1:
+            print(f"  Noise: {cluster_counts[cluster_id]} cases")
+        else:
+            print(f"  Cluster {cluster_id}: {cluster_counts[cluster_id]} cases")
+    
+    print(f"\nOriginal category distribution:")
+    category_counts = Counter(original_categories)
     for category, count in category_counts.most_common():
-        percentage = (count / len(categories)) * 100
+        percentage = (count / len(original_categories)) * 100
         print(f"  {category}: {count} cases ({percentage:.1f}%)")
     
-    print(f"\nHDBSCAN embedding range:")
-    print(f"  X: {embedding[:, 0].min():.2f} to {embedding[:, 0].max():.2f}")
-    print(f"  Y: {embedding[:, 1].min():.2f} to {embedding[:, 1].max():.2f}")
+    # Analyze cluster composition
+    print(f"\nCluster composition by original category:")
+    for cluster_id in sorted([c for c in unique_clusters if c != -1]):
+        cluster_mask = [i for i, c in enumerate(cluster_labels) if c == cluster_id]
+        cluster_categories = [original_categories[i] for i in cluster_mask]
+        cluster_cat_counts = Counter(cluster_categories)
+        
+        print(f"\n  Cluster {cluster_id} ({len(cluster_mask)} cases):")
+        for cat, count in cluster_cat_counts.most_common(3):  # Top 3 categories
+            pct = (count / len(cluster_mask)) * 100
+            print(f"    - {cat}: {count} ({pct:.1f}%)")
 
 def main():
-    """Main function to run the complete interactive HDBSCAN visualization pipeline"""
+    """Main function to run the complete HDBSCAN clustering pipeline"""
     print("Loading and processing data...")
     df, data = load_and_process_data()
     
@@ -252,24 +331,24 @@ def main():
     features, vectorizer = create_text_features(summaries)
     print(f"Created {features.shape[1]} features")
     
-    # Perform HDBSCAN
-    print("Performing HDBSCAN dimensionality reduction...")
-    embedding = perform_HDBSCAN(features)
+    # Perform clustering and embedding
+    print("Performing UMAP + HDBSCAN clustering...")
+    embedding_2d, cluster_labels, clusterer = perform_clustering_and_embedding(features)
     
     # Create interactive visualization
     print("Creating interactive visualization...")
-    fig = create_interactive_visualization(embedding, categories, titles, summaries)
+    fig = create_interactive_visualization(embedding_2d, cluster_labels, categories, titles, summaries)
     
-    # Print analysis
-    print_cluster_analysis(embedding, categories, titles)
+    # Analyze results
+    analyze_clusters(cluster_labels, categories, titles)
     
-    return embedding, categories, titles, fig
+    return embedding_2d, cluster_labels, categories, titles, fig
 
 # Example usage
 if __name__ == "__main__":    
     try:
         main()
-        print("Interactive HDBSCAN visualization completed successfully!")
+        print("HDBSCAN clustering completed successfully!")
         
     except FileNotFoundError:
         print(f"Error: Could not find the file '{DIR_PATH}'")
