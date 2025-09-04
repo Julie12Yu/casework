@@ -12,7 +12,7 @@ import re
 from sklearn.metrics import silhouette_score
 from sklearn.cluster import KMeans
 
-DIR_PATH = 'all_jsons/court_pdfs_text.json'
+DIR_PATH = 'all_jsons/categorized_cases.json'
 MIN_DIST = 0.2
 N_NEIGHBORS = 10
 
@@ -142,30 +142,29 @@ def wrap_text(text, width=60):
     """Helper function to wrap text for better display"""
     return '<br>'.join(textwrap.wrap(str(text), width=width))
 
-def create_interactive_visualization(embedding, categories, titles, ai_materials, all_categories, output_file='legal_full_text_umap_interactive.html'):
-    """Create interactive UMAP visualization with correct color mapping"""
-    
+def create_interactive_visualization(embedding, categories, titles, ai_materials, all_categories, output_file='legal_full_text_umap.png'):
+    """Create interactive UMAP visualization with correct color mapping and save as PNG."""
+
     # Clean categories
     categories_cleaned = [c.strip() if isinstance(c, str) else 'Unknown' for c in categories]
-    
+
     # Get unique base categories and assign colors
     unique_base_categories = sorted(set(categories_cleaned))
-    
+
     # Create color palette
-    colors = (px.colors.qualitative.Set3 + 
-             px.colors.qualitative.Bold + 
-             px.colors.qualitative.Dark24 + 
-             px.colors.qualitative.Pastel)
-    
+    colors = (px.colors.qualitative.Set3 +
+             px.colors.qualitative.Bold +
+             px.colors.qualitative.Dark24)
+
     # Map base categories to colors
     base_color_map = {cat: colors[i % len(colors)] for i, cat in enumerate(unique_base_categories)}
-    
+
     # Count occurrences of each category
     category_counts = Counter(categories_cleaned)
-    
+
     # Create display labels with counts
     category_display = [f"{cat} ({category_counts[cat]})" for cat in categories_cleaned]
-    
+
     # Create DataFrame
     df_plot = pd.DataFrame({
         'x': embedding[:, 0],
@@ -177,32 +176,32 @@ def create_interactive_visualization(embedding, categories, titles, ai_materials
         'all_categories': all_categories,
         'title_wrapped': [t[:100] + '...' if len(t) > 100 else t for t in titles]
     })
-    
+
     # Create empty figure
     fig = go.Figure()
-    
+
     # Add scatter trace for each category
     for i, category in enumerate(unique_base_categories):
         mask = df_plot['category_base'] == category
         category_data = df_plot[mask]
-        
+
         if len(category_data) > 0:
             count = category_counts[category]
-            
+
             # Create custom data for hover
             customdata = []
             for _, row in category_data.iterrows():
                 ai_status = "Yes" if row['ai_material'] else "No"
                 all_cats = ", ".join(row['all_categories']) if isinstance(row['all_categories'], list) else str(row['all_categories'])
                 customdata.append([row['category_display'], ai_status, all_cats, wrap_text(row['title'], width=80)])
-            
+
             fig.add_trace(go.Scatter(
                 x=category_data['x'],
                 y=category_data['y'],
                 mode='markers',
                 marker=dict(
                     color=base_color_map[category],
-                    size=10,
+                    size=5,
                     line=dict(width=1, color='white'),
                     opacity=0.8
                 ),
@@ -215,7 +214,7 @@ def create_interactive_visualization(embedding, categories, titles, ai_materials
                               '<b>AI Material:</b> %{customdata[1]}<br>' +
                               '<extra></extra>'
             ))
-    
+
     # Update layout
     fig.update_layout(
         title={
@@ -237,8 +236,8 @@ def create_interactive_visualization(embedding, categories, titles, ai_materials
             bordercolor='black',
             borderwidth=1
         ),
-        width=1400,
-        height=900,
+        width=2800, # Increased width
+        height=1800, # Increased height
         margin=dict(r=300),
         hoverlabel=dict(
             bgcolor="white",
@@ -250,16 +249,15 @@ def create_interactive_visualization(embedding, categories, titles, ai_materials
         plot_bgcolor='white',
         paper_bgcolor='white'
     )
-    
+
     # Add grid
     fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
     fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
-    
+
     # Save and show
-    fig.write_html(output_file)
-    print(f"Interactive visualization saved to: {output_file}")
-    fig.show()
-    
+    fig.write_image(output_file) # Changed from write_html to write_image
+    print(f"Static visualization saved to: {output_file}")
+
     return fig
 
 def print_cluster_analysis(embedding, categories, titles, ai_materials):
