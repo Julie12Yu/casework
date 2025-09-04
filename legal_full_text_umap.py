@@ -12,7 +12,7 @@ import re
 from sklearn.metrics import silhouette_score
 from sklearn.cluster import KMeans
 
-DIR_PATH = 'all_jsons/categorized_cases.json'
+DIR_PATH = 'all_jsons/court_pdfs_text.json'
 MIN_DIST = 0.2
 N_NEIGHBORS = 10
 
@@ -98,12 +98,8 @@ def perform_umap(features):
     return embedding, reducer
 
 def non_category_silhouette(original_features, new_embedding, categories=None):
-    """
-    Evaluate quality using silhouette, Calinski-Harabasz, and Davies-Bouldin scores
-    with K-means clustering (no ground truth needed).
-    """
-    from sklearn.metrics import silhouette_score, calinski_harabasz_score, davies_bouldin_score
-    print("\n=== CLUSTERING VALIDATION METRICS ===")
+    """Evaluate quality using silhouette scores with K-means clustering (no ground truth needed)"""
+    print("\n=== SILHOUETTE SCORE ANALYSIS ===")
     
     n_samples = len(original_features)
     max_k = min(10, n_samples // 3)
@@ -111,31 +107,28 @@ def non_category_silhouette(original_features, new_embedding, categories=None):
     print(f"Analyzing {n_samples} cases")
     
     try:
+        # Test K-means clustering with different k values
+        print(f"\n--- K-Means Clustering Analysis ---")
         k_range = range(2, max_k + 1)
         
         for n_clusters in k_range:
             if n_clusters >= n_samples:
                 break
                 
+            # K-means on original space
+            kmeans_orig = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+            orig_cluster_labels = kmeans_orig.fit_predict(original_features)
+            orig_kmeans_sil = silhouette_score(original_features, orig_cluster_labels)
+            
             # K-means on new embedding space
             kmeans_new = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
             new_cluster_labels = kmeans_new.fit_predict(new_embedding)
-            
-            # --- CALCULATE SCORES ---
-            # Silhouette Score (higher is better)
             new_kmeans_sil = silhouette_score(new_embedding, new_cluster_labels)
             
-            # Calinski-Harabasz Index (higher is better)
-            new_kmeans_calinski = calinski_harabasz_score(new_embedding, new_cluster_labels)
-            
-            # Davies-Bouldin Index (lower is better)
-            new_kmeans_davies = davies_bouldin_score(new_embedding, new_cluster_labels)
-            
-            print(f"\n--- Metrics for k={n_clusters} clusters ---")
-            print(f"  Silhouette Score: {new_kmeans_sil:.4f} (Higher is better)")
-            print(f"  Calinski-Harabasz Index: {new_kmeans_calinski:.4f} (Higher is better)")
-            print(f"  Davies-Bouldin Index: {new_kmeans_davies:.4f} (Lower is better)")
-            
+            improvement = new_kmeans_sil - orig_kmeans_sil
+            print(f"K-means (k={n_clusters}) - Original: {orig_kmeans_sil:.4f}, New: {new_kmeans_sil:.4f}, Δ: {improvement:+.4f}")
+        
+        # Interpretation
         print(f"\nSilhouette Score Interpretation:")
         print(f"  > 0.7: Strong separation")
         print(f"  0.5-0.7: Reasonable separation") 
@@ -143,13 +136,13 @@ def non_category_silhouette(original_features, new_embedding, categories=None):
         print(f"  < 0.25: Poor separation")
         
     except Exception as e:
-        print(f"Error calculating clustering metrics: {e}")
+        print(f"Error calculating silhouette scores: {e}")
 
 def wrap_text(text, width=60):
     """Helper function to wrap text for better display"""
     return '<br>'.join(textwrap.wrap(str(text), width=width))
 
-def create_interactive_visualization(embedding, categories, titles, ai_materials, all_categories, output_file='legal_cases_umap_interactive.html'):
+def create_interactive_visualization(embedding, categories, titles, ai_materials, all_categories, output_file='legal_full_text_umap_interactive.html'):
     """Create interactive UMAP visualization with correct color mapping"""
     
     # Clean categories

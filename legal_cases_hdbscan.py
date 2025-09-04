@@ -11,9 +11,9 @@ from collections import Counter
 import textwrap
 import re
 
-DIR_PATH = 'all_jsons/categorized_cases.json'
+DIR_PATH = 'all_jsons/court_pdfs_text.json'
 MIN_CLUSTER_SIZE = 13
-MIN_SAMPLES = 2
+MIN_SAMPLES = 4
 
 MIN_DIST = 0.2
 N_NEIGHBORS = 13
