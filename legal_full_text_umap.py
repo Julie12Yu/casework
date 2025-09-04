@@ -152,8 +152,7 @@ def create_interactive_visualization(embedding, categories, titles, ai_materials
     unique_base_categories = sorted(set(categories_cleaned))
 
     # Create color palette
-    colors = (px.colors.qualitative.Set3 +
-             px.colors.qualitative.Bold +
+    colors = (px.colors.qualitative.Bold +
              px.colors.qualitative.Dark24)
 
     # Map base categories to colors
