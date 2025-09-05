@@ -142,8 +142,8 @@ def wrap_text(text, width=60):
     """Helper function to wrap text for better display"""
     return '<br>'.join(textwrap.wrap(str(text), width=width))
 
-def create_interactive_visualization(embedding, categories, titles, ai_materials, all_categories, output_file='legal_full_text_umap.png'):
-    """Create interactive UMAP visualization with correct color mapping and save as PNG."""
+def create_interactive_visualization(embedding, categories, titles, ai_materials, all_categories, silhouette_scores, output_file='legal_full_text_umap.png'):
+    """Create extra large UMAP visualization for presentations or large displays."""
 
     # Clean categories
     categories_cleaned = [c.strip() if isinstance(c, str) else 'Unknown' for c in categories]
@@ -200,8 +200,8 @@ def create_interactive_visualization(embedding, categories, titles, ai_materials
                 mode='markers',
                 marker=dict(
                     color=base_color_map[category],
-                    size=5,
-                    line=dict(width=1, color='white'),
+                    size=12,  # Even larger markers
+                    line=dict(width=2, color='white'),  # Thicker border
                     opacity=0.8
                 ),
                 name=f"{category} ({count})",
@@ -214,18 +214,28 @@ def create_interactive_visualization(embedding, categories, titles, ai_materials
                               '<extra></extra>'
             ))
 
-    # Update layout
+    # Update layout for presentation/large display
     fig.update_layout(
         title={
-            'text': 'Interactive Legal Cases UMAP Visualization<br><sub>Cases clustered by name similarity and categorized by content</sub>',
+            'text': 'Legal Cases UMAP Visualization<br><sub>Cases clustered by name similarity and categorized by content</sub>',
             'x': 0.5,
-            'font': {'size': 20}
+            'font': {'size': 36}  # Very large title
         },
         xaxis_title='UMAP Dimension 1',
         yaxis_title='UMAP Dimension 2',
-        font=dict(size=12),
+        xaxis=dict(
+            title_font=dict(size=28),  # Large axis title font
+            tickfont=dict(size=20)     # Large axis tick font
+        ),
+        yaxis=dict(
+            title_font=dict(size=28),  # Large axis title font
+            tickfont=dict(size=20)     # Large axis tick font
+        ),
+        font=dict(size=20),  # Large base font
         legend=dict(
             title='Category (Count)',
+            title_font=dict(size=24),  # Large legend title
+            font=dict(size=18),        # Large legend items
             orientation="v",
             yanchor="top",
             y=1,
@@ -233,15 +243,16 @@ def create_interactive_visualization(embedding, categories, titles, ai_materials
             x=1.02,
             bgcolor='rgba(255,255,255,0.9)',
             bordercolor='black',
-            borderwidth=1
+            borderwidth=2
         ),
-        width=2800, # Increased width
-        height=1800, # Increased height
-        margin=dict(r=300),
+        # Extra large dimensions
+        width=2560,   # 1440p width
+        height=1440,  # 1440p height
+        margin=dict(r=400, l=100, t=150, b=100),  # Larger margins
         hoverlabel=dict(
             bgcolor="white",
             bordercolor="black",
-            font_size=12,
+            font_size=20,  # Larger hover font
             font_family="Arial",
             align="left"
         ),
@@ -249,13 +260,31 @@ def create_interactive_visualization(embedding, categories, titles, ai_materials
         paper_bgcolor='white'
     )
 
+    # Add the silhouette score annotation below the legend
+     # Add all silhouette score annotations stacked under the legend
+    y_offset = 0.02
+    for i, (k, score) in enumerate(silhouette_scores.items()):
+        fig.add_annotation(
+            text=f"Silhouette (k={k}): {score:.4f}",
+            xref="paper", yref="paper",
+            x=1.02, y=y_offset + i*0.04,  # stack vertically
+            showarrow=False,
+            font=dict(size=16, color="black"),
+            bgcolor="rgba(255,255,255,0.8)",
+            bordercolor="black",
+            borderwidth=2,
+            borderpad=6,
+            xanchor="left",
+            yanchor="bottom"
+        )
+    
     # Add grid
     fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
     fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
 
-    # Save and show
-    fig.write_image(output_file) # Changed from write_html to write_image
-    print(f"Static visualization saved to: {output_file}")
+    # Save with high DPI
+    fig.write_image(output_file, width=2560, height=1440, scale=2)
+    print(f"Extra large visualization saved to: {output_file}")
 
     return fig
 
@@ -281,6 +310,17 @@ def print_cluster_analysis(embedding, categories, titles, ai_materials):
     print(f"  X: {embedding[:, 0].min():.2f} to {embedding[:, 0].max():.2f}")
     print(f"  Y: {embedding[:, 1].min():.2f} to {embedding[:, 1].max():.2f}")
 
+def calculate_silhouette_scores(X, k_range=range(3, 11), random_state=42):
+    """Calculate silhouette scores for a range of k values"""
+    scores = {}
+    for k in k_range:
+        if k < len(X):  # avoid invalid k
+            kmeans = KMeans(n_clusters=k, random_state=random_state, n_init=10)
+            labels = kmeans.fit_predict(X)
+            score = silhouette_score(X, labels)
+            scores[k] = score
+    return scores
+
 def main():
     """Main function to run the complete interactive UMAP visualization pipeline"""
     print("Loading and processing data...")
@@ -288,7 +328,7 @@ def main():
     
     # Extract data for processing
     titles = [case['title'] for case in processed_cases]
-    summaries = [case['summary'] for case in processed_cases]  # Same as titles in this format
+    summaries = [case['summary'] for case in processed_cases]
     categories = [case['main_category'] for case in processed_cases]
     ai_materials = [case['ai_material'] for case in processed_cases]
     all_categories = [case['all_categories'] for case in processed_cases]
@@ -304,13 +344,16 @@ def main():
     print("Performing UMAP dimensionality reduction...")
     embedding, reducer = perform_umap(features)
 
-    # Evaluate UMAP with silhouette scores
-    non_category_silhouette(features, embedding, categories)
+    # Evaluate UMAP with silhouette scores (optional, for logging)
+    non_category_silhouette(features, embedding)
 
-    # Create interactive visualization
+    # Calculate silhouette scores for k = 3 to 10
+    silhouette_scores = calculate_silhouette_scores(embedding, range(3, 11))
+
+    # Create interactive visualization with all scores
     print("Creating interactive visualization...")
-    fig = create_interactive_visualization(embedding, categories, titles, ai_materials, all_categories)
-    
+    fig = create_interactive_visualization(embedding, categories, titles, ai_materials, all_categories, silhouette_scores)
+
     # Print analysis
     print_cluster_analysis(embedding, categories, titles, ai_materials)
     
