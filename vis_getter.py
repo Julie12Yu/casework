@@ -11,6 +11,7 @@ import textwrap
 import re
 from sklearn.metrics import silhouette_score
 from sklearn.cluster import KMeans
+import sys
 
 DIR_PATH = 'all_jsons/categorized_cases.json'
 MIN_DIST = 0.2
@@ -208,15 +209,19 @@ def create_interactive_visualization(embedding, categories, titles, ai_materials
 
     return fig
 
-def calculate_silhouette_scores(X, k_range=range(3, 11), random_state=42):
+def calculate_silhouette_scores(X, embeddings_path, k_range, random_state=42):
     """Calculate silhouette scores for a range of k values"""
+    file_path = (embeddings_path.split('/')[1]).split('_')[0]
+    print("Calculating silhouette scores for", file_path)
     scores = {}
     for k in k_range:
         if k < len(X):  # avoid invalid k
             kmeans = KMeans(n_clusters=k, random_state=random_state, n_init=10)
             labels = kmeans.fit_predict(X)
             score = silhouette_score(X, labels)
+            print("Silhouette score for k =", k, "is", score)
             scores[k] = score
+    print("Highest sihouette score:", max(scores.values()), "for k =", max(scores, key=scores.get))
     return scores
 
 def main():
@@ -234,7 +239,7 @@ def main():
     print(f"Loaded {len(titles)} cases")
 
     # Calculate silhouette scores for k = 3 to 10
-    silhouette_scores = calculate_silhouette_scores(embedding, range(3, 11))
+    silhouette_scores = calculate_silhouette_scores(embedding, embedding_path, range(3, 11))
 
     # Create interactive visualization with all scores
     print("Creating interactive visualization...")
@@ -245,7 +250,9 @@ def main():
 # Example usage
 if __name__ == "__main__":
     try:
-        embedding, categories, titles, fig = main()
+        embedding_path = sys.argv[1]
+        embedding = np.load(embedding_path)
+        embedding, categories, titles, fig= main()
         print("Interactive visualization completed successfully!")
         
     except FileNotFoundError:
