@@ -63,7 +63,7 @@ def wrap_text(text, width=60):
     """Helper function to wrap text for better display"""
     return '<br>'.join(textwrap.wrap(str(text), width=width))
 
-def create_interactive_visualization(embedding, categories, titles, ai_materials, all_categories, silhouette_scores, output_file='legal_full_text_umap.png'):
+def create_interactive_visualization(embedding, embedding_method, categories, titles, ai_materials, all_categories, silhouette_scores, output_file='legal_full_text_umap.png'):
     """Create extra large UMAP visualization for presentations or large displays."""
 
     # Clean categories
@@ -138,12 +138,12 @@ def create_interactive_visualization(embedding, categories, titles, ai_materials
     # Update layout for presentation/large display
     fig.update_layout(
         title={
-            'text': 'Legal Cases UMAP Visualization<br><sub>Cases clustered by name similarity and categorized by content</sub>',
+            'text': 'Legal Cases UMAP Visualization<br><sub>' + embedding_method + '</sub>',
             'x': 0.5,
             'font': {'size': 36}  # Very large title
         },
-        xaxis_title='UMAP Dimension 1',
-        yaxis_title='UMAP Dimension 2',
+        xaxis_title=(embedding_method + ' Dimension 1'),
+        yaxis_title=(embedding_method + ' Dimension 2'),
         xaxis=dict(
             title_font=dict(size=28),  # Large axis title font
             tickfont=dict(size=20)     # Large axis tick font
@@ -209,10 +209,9 @@ def create_interactive_visualization(embedding, categories, titles, ai_materials
 
     return fig
 
-def calculate_silhouette_scores(X, embeddings_path, k_range, random_state=42):
+def calculate_silhouette_scores(X, embedding_method, k_range, random_state=42):
     """Calculate silhouette scores for a range of k values"""
-    file_path = (embeddings_path.split('/')[1]).split('_')[0]
-    print("Calculating silhouette scores for", file_path)
+    print("Calculating silhouette scores for", embedding_method)
     scores = {}
     for k in k_range:
         if k < len(X):  # avoid invalid k
@@ -237,13 +236,13 @@ def main():
     all_categories = [case['all_categories'] for case in processed_cases]
     
     print(f"Loaded {len(titles)} cases")
-
+    embedding_method = (embedding_path.split('/')[1]).split('_')[0]
     # Calculate silhouette scores for k = 3 to 10
-    silhouette_scores = calculate_silhouette_scores(embedding, embedding_path, range(3, 11))
+    silhouette_scores = calculate_silhouette_scores(embedding, embedding_method, range(3, 11))
 
     # Create interactive visualization with all scores
     print("Creating interactive visualization...")
-    fig = create_interactive_visualization(embedding, categories, titles, ai_materials, all_categories, silhouette_scores)
+    fig = create_interactive_visualization(embedding, embedding_method, categories, titles, ai_materials, all_categories, silhouette_scores)
     
     return embedding, categories, titles, fig
 
