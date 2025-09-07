@@ -10,43 +10,34 @@ from sklearn.metrics import silhouette_score
 from sklearn.cluster import KMeans
 import sys
 
-DIR_PATH = 'all_jsons/court_pdfs_text.json'
-
-def parse_case_metadata(metadata_string, count):
-    """Parse the JSON metadata from the case value string"""
-    try:
-        # Extract JSON from the markdown code block
-        json_match = re.search(r'```json\n(.*?)\n```', metadata_string, re.DOTALL)
-        json_str = json_match.group(1)
-        metadata = json.loads(json_str)
-        return metadata
-    except Exception as e:
-        print("COUNT: ", count)
-        print(f"Warning: Error processing metadata: {e}")
-        return {"ai_material": False, "category": ["Unknown"]}
+DIR_PATH = 'summaries/categorized_cases.json' # TODO: Change to any path depending on if getting the summaries or getting the fulltext
 
 def load_and_process_data():
-    """Load JSON data and process it for UMAP visualization"""
+    """Load JSON data and process it for visualization"""
     with open(DIR_PATH, 'r', encoding='utf-8') as file:
         data = json.load(file)
     
-    # Process the new format
     processed_cases = []
-    total = 0
-    for casename, metadata_string in data.items():
-        total += 1
-        metadata = parse_case_metadata(metadata_string, total)
-        
-        # Extract main category
-        categories = metadata.get('category', ['Unknown'])
-        main_category = categories[0] if isinstance(categories, list) and len(categories) > 0 else 'Unknown'
-        
+    for count, (casename, metadata) in enumerate(data.items(), start=1):
+        try:
+            summary = metadata.get("summary", casename)
+            categories_obj = metadata.get("categories", {})
+            categories = categories_obj.get("category", ["Unknown"])
+            ai_material = categories_obj.get("ai_material", False)
+            main_category = categories[0] if isinstance(categories, list) and categories else "Unknown"
+        except Exception as e:
+            print(f"COUNT {count} – Warning: could not parse {casename}: {e}")
+            summary = casename
+            main_category = "Unknown"
+            ai_material = False
+            categories = ["Unknown"]
+
         case_info = {
-            'title': casename,
-            'summary': casename,  # Using casename as summary since no separate summary is provided
-            'main_category': main_category,
-            'ai_material': metadata.get('ai_material', False),
-            'all_categories': categories
+            "title": casename,
+            "summary": summary,
+            "main_category": main_category,
+            "ai_material": ai_material,
+            "all_categories": categories,
         }
         processed_cases.append(case_info)
     
