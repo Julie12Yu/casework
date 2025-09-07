@@ -1,16 +1,30 @@
 import json
 from openai import OpenAI
 import sys
+import time
 
-def get_raw_response(prompt, model="gpt-4.1", **kwargs):
+def get_raw_response(prompt, model="gpt-4o-mini", **kwargs):
     with open("otherkey.txt") as f:
         key = f.read().strip()
     client = OpenAI(api_key=key)
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return prompt, response.choices[0].message.content
+
+    max_retries = 5
+    for attempt in range(max_retries):
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                **kwargs
+            )
+            return prompt, response.choices[0].message.content
+        except Exception as e:
+            if "Rate limit" in str(e) or "429" in str(e):
+                sleep_time = (2 ** attempt) + 5
+                print(f"Rate limit hit. Retrying in {sleep_time:.2f}s...")
+                time.sleep(sleep_time)
+            else:
+                raise
+    raise RuntimeError("Max retries exceeded")
 
 
 def classify_text(title, text):
@@ -52,9 +66,10 @@ def summarize_text(title, text):
 
 def parse_output(output):
     try:
-        return json.loads(output)
-    except:
-        raise ValueError("Invalid output")
+        cleaned = output.strip().strip("`").replace("json", "", 1).strip()
+        return json.loads(cleaned)
+    except Exception as e:
+        raise ValueError(f"Invalid output: {output}") from e
     
 
 def main(DATA_DIR):
@@ -66,7 +81,7 @@ def main(DATA_DIR):
     for title, text in all_court_pdfs.items():
         summary = summarize_text(title, text)
         categories = classify_text(title, summary)
-        case_to_categories.setdefault(title, categories)
+        case_to_categories[title] = {"summary": parse_output(summary)["summary"], "categories": parse_output(categories)}
 
     # You can optionally save the result to a file or print it
     with open("categorized_cases.json", "w", encoding="utf-8") as f:

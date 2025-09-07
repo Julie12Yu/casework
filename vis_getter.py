@@ -138,7 +138,7 @@ def create_interactive_visualization(embedding, embedding_method, categories, ti
     # Update layout for presentation/large display
     fig.update_layout(
         title={
-            'text': 'Legal Cases UMAP Visualization<br><sub>' + embedding_method + '</sub>',
+            'text': 'Legal Cases Visualization<br><sub>' + embedding_method + '</sub>',
             'x': 0.5,
             'font': {'size': 36}  # Very large title
         },
