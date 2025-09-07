@@ -43,7 +43,7 @@ def load_and_process_data():
         
         case_info = {
             'title': casename,
-            'summary': casename,  # Still using title as summary
+            'text': casename,  # Still using title as summary
             'main_category': main_category,
             'ai_material': metadata.get('ai_material', False),
             'all_categories': categories
