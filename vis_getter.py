@@ -63,9 +63,9 @@ def wrap_text(text, width=60):
     """Helper function to wrap text for better display"""
     return '<br>'.join(textwrap.wrap(str(text), width=width))
 
-def create_interactive_visualization(embedding, embedding_method, categories, titles, ai_materials, all_categories, silhouette_scores, output_file='legal_full_text_umap.png'):
+def create_interactive_visualization(embedding, embedding_method, categories, titles, ai_materials, all_categories, silhouette_scores):
     """Create extra large UMAP visualization for presentations or large displays."""
-
+    output_file=('vis_' + embedding_method + '.png')
     # Clean categories
     categories_cleaned = [c.strip() if isinstance(c, str) else 'Unknown' for c in categories]
 
@@ -224,7 +224,6 @@ def calculate_silhouette_scores(X, embedding_method, k_range, random_state=42):
     return scores
 
 def main():
-    """Main function to run the complete interactive UMAP visualization pipeline"""
     print("Loading and processing data...")
     df, processed_cases = load_and_process_data()
     
@@ -237,10 +236,8 @@ def main():
     
     print(f"Loaded {len(titles)} cases")
     embedding_method = (embedding_path.split('/')[1]).split('_')[0]
-    # Calculate silhouette scores for k = 3 to 10
     silhouette_scores = calculate_silhouette_scores(embedding, embedding_method, range(3, 11))
 
-    # Create interactive visualization with all scores
     print("Creating interactive visualization...")
     fig = create_interactive_visualization(embedding, embedding_method, categories, titles, ai_materials, all_categories, silhouette_scores)
     

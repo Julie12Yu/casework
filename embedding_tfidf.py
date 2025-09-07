@@ -95,15 +95,14 @@ def main():
     
     # Save TF-IDF embeddings
     np.save(os.path.join(SAVE_DIR, "tfidf_embeddings.npy"), features)
-    pd.DataFrame(features, index=titles).to_csv(os.path.join(SAVE_DIR, "tfidf_embeddings.csv"))
-    print(f"TF-IDF embeddings saved to {SAVE_DIR}/tfidf_embeddings.(npy/csv)")
+    print(f"TF-IDF embeddings saved to {SAVE_DIR}/tfidf_embeddings.npy")
     
     return features, categories, titles
 
 if __name__ == "__main__":
     try:
         embedding, categories, titles = main()
-        print("Interactive UMAP visualization completed successfully!")
+        print("Embedding completed successfully!")
         
     except FileNotFoundError:
         print(f"Error: Could not find the file '{DIR_PATH}'")
