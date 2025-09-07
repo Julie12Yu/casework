@@ -3,10 +3,9 @@ import numpy as np
 import pandas as pd
 import torch
 from transformers import AutoTokenizer, AutoModel
-import re
 import os
 
-DIR_PATH = 'all_jsons/categorized_cases.json'
+DIR_PATH = 'categorized_cases.json'
 SAVE_DIR = "embeddings"
 os.makedirs(SAVE_DIR, exist_ok=True)
 
@@ -15,38 +14,27 @@ MODEL_NAME = "nlpaueb/legal-bert-base-uncased"
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 model = AutoModel.from_pretrained(MODEL_NAME)
 
-def parse_case_metadata(metadata_string, count):
-    """Parse the JSON metadata from the case value string"""
-    try:
-        json_match = re.search(r'```json\n(.*?)\n```', metadata_string, re.DOTALL)
-        json_str = json_match.group(1)
-        metadata = json.loads(json_str)
-        return metadata
-    except Exception as e:
-        print("COUNT: ", count)
-        print(f"Warning: Error processing metadata: {e}")
-        return {"ai_material": False, "category": ["Unknown"]}
-
 def load_and_process_data():
     """Load JSON data and process it for embeddings"""
     with open(DIR_PATH, 'r', encoding='utf-8') as file:
         data = json.load(file)
     
     processed_cases = []
-    total = 0
-    for casename, metadata_string in data.items():
-        total += 1
-        metadata = parse_case_metadata(metadata_string, total)
+    for casename, case_data in data.items():
+        # Extract fields from new format
+        summary = case_data.get("summary", casename)  # fallback to casename
+        categories_obj = case_data.get("categories", {})
+        categories = categories_obj.get("category", ["Unknown"])
+        ai_material = categories_obj.get("ai_material", False)
         
-        categories = metadata.get('category', ['Unknown'])
-        main_category = categories[0] if isinstance(categories, list) and len(categories) > 0 else 'Unknown'
+        main_category = categories[0] if isinstance(categories, list) and len(categories) > 0 else "Unknown"
         
         case_info = {
-            'title': casename,
-            'text': casename,  # Still using title as summary
-            'main_category': main_category,
-            'ai_material': metadata.get('ai_material', False),
-            'all_categories': categories
+            "title": casename,
+            "summary": summary,
+            "main_category": main_category,
+            "ai_material": ai_material,
+            "all_categories": categories,
         }
         processed_cases.append(case_info)
     
@@ -67,7 +55,6 @@ def create_legalbert_embeddings(texts, batch_size=16, device=None):
 
         with torch.no_grad():
             outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-            # Mean pooling over the sequence length
             last_hidden_state = outputs.last_hidden_state
             mask = attention_mask.unsqueeze(-1).expand(last_hidden_state.size()).float()
             summed = torch.sum(last_hidden_state * mask, dim=1)
