@@ -3,9 +3,6 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.preprocessing import StandardScaler
-from umap import UMAP
 from collections import Counter
 import textwrap
 import re
@@ -13,9 +10,7 @@ from sklearn.metrics import silhouette_score
 from sklearn.cluster import KMeans
 import sys
 
-DIR_PATH = 'all_jsons/categorized_cases.json'
-MIN_DIST = 0.2
-N_NEIGHBORS = 10
+DIR_PATH = 'all_jsons/court_pdfs_text.json'
 
 def parse_case_metadata(metadata_string, count):
     """Parse the JSON metadata from the case value string"""
@@ -65,7 +60,7 @@ def wrap_text(text, width=60):
 
 def create_interactive_visualization(embedding, embedding_method, categories, titles, ai_materials, all_categories, silhouette_scores):
     """Create extra large UMAP visualization for presentations or large displays."""
-    output_file=('vis_' + embedding_method + '.png')
+    output_file=('vis_' + text_type + "_" + embedding_method + '.png')
     # Clean categories
     categories_cleaned = [c.strip() if isinstance(c, str) else 'Unknown' for c in categories]
 
@@ -235,7 +230,7 @@ def main():
     all_categories = [case['all_categories'] for case in processed_cases]
     
     print(f"Loaded {len(titles)} cases")
-    embedding_method = (embedding_path.split('/')[1]).split('_')[0]
+    embedding_method = (embedding_path.split('/')[2]).split('_')[0]
     silhouette_scores = calculate_silhouette_scores(embedding, embedding_method, range(3, 11))
 
     print("Creating interactive visualization...")
@@ -247,6 +242,7 @@ def main():
 if __name__ == "__main__":
     try:
         embedding_path = sys.argv[1]
+        text_type = sys.argv[2]
         embedding = np.load(embedding_path)
         embedding, categories, titles, fig= main()
         print("Interactive visualization completed successfully!")
