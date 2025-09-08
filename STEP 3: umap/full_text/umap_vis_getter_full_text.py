@@ -3,14 +3,33 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.preprocessing import StandardScaler
+from umap import UMAP
 from collections import Counter
 import textwrap
 import re
 from sklearn.metrics import silhouette_score
 from sklearn.cluster import KMeans
-import sys
 
-DIR_PATH = 'summaries/categorized_cases.json' # TODO: Change to any path depending on if getting the summaries or getting the fulltext
+DIR_PATH = 'full_text/court_pdfs_text.json'
+EMBEDDING_DIR = "full_text/embeddings/tfidf_embeddings.npy"
+TEXT_TYPE = "TF-IDF"
+MIN_DIST = 0.2
+N_NEIGHBORS = 10
+
+def parse_case_metadata(metadata_string, count):
+    """Parse the JSON metadata from the case value string"""
+    try:
+        # Extract JSON from the markdown code block
+        json_match = re.search(r'```json\n(.*?)\n```', metadata_string, re.DOTALL)
+        json_str = json_match.group(1)
+        metadata = json.loads(json_str)
+        return metadata
+    except Exception as e:
+        print("COUNT: ", count)
+        print(f"Warning: Error processing metadata: {e}")
+        return {"ai_material": False, "category": ["Unknown"]}
 
 def load_and_process_data():
     """Load JSON data and process it for visualization"""
@@ -51,7 +70,7 @@ def wrap_text(text, width=60):
 
 def create_interactive_visualization(embedding, embedding_method, categories, titles, ai_materials, all_categories, silhouette_scores):
     """Create extra large UMAP visualization for presentations or large displays."""
-    output_file=('vis_' + text_type + "_" + embedding_method + '.png')
+    output_file=('umap_vis_' + embedding_method + '_' + TEXT_TYPE + '.png')
     # Clean categories
     categories_cleaned = [c.strip() if isinstance(c, str) else 'Unknown' for c in categories]
 
@@ -209,6 +228,51 @@ def calculate_silhouette_scores(X, embedding_method, k_range, random_state=42):
     print("Highest sihouette score:", max(scores.values()), "for k =", max(scores, key=scores.get))
     return scores
 
+def load_and_process_data():
+    """Load JSON data and process it for UMAP visualization"""
+    with open(DIR_PATH, 'r', encoding='utf-8') as file:
+        data = json.load(file)
+    
+    # Process the new format
+    processed_cases = []
+    total = 0
+    for casename, metadata_string in data.items():
+        total += 1
+        metadata = parse_case_metadata(metadata_string, total)
+        
+        # Extract main category
+        categories = metadata.get('category', ['Unknown'])
+        main_category = categories[0] if isinstance(categories, list) and len(categories) > 0 else 'Unknown'
+        
+        case_info = {
+            'title': casename,
+            'summary': casename,  # Using casename as summary since no separate summary is provided
+            'main_category': main_category,
+            'ai_material': metadata.get('ai_material', False),
+            'all_categories': categories
+        }
+        processed_cases.append(case_info)
+    
+    df = pd.DataFrame(processed_cases)
+    return df, processed_cases
+
+def perform_umap(features):
+    """Perform UMAP dimensionality reduction"""
+    # Adjust parameters based on dataset size
+    n_samples = features.shape[0]
+    n_neighbors = min(N_NEIGHBORS, max(2, n_samples - 1))
+    
+    scaler = StandardScaler()
+    features_scaled = scaler.fit_transform(features)
+    
+    reducer = UMAP(
+        n_neighbors=n_neighbors,
+        min_dist=MIN_DIST,
+    )
+    
+    embedding = reducer.fit_transform(features_scaled)
+    return embedding, reducer
+
 def main():
     print("Loading and processing data...")
     df, processed_cases = load_and_process_data()
@@ -222,18 +286,26 @@ def main():
     
     print(f"Loaded {len(titles)} cases")
     embedding_method = (embedding_path.split('/')[2]).split('_')[0]
-    silhouette_scores = calculate_silhouette_scores(embedding, embedding_method, range(3, 11))
+
+    # 👉 Apply UMAP here
+    embedding_umap, reducer = perform_umap(embedding)
+
+    # Use UMAP results for clustering + visualization
+    silhouette_scores = calculate_silhouette_scores(embedding_umap, embedding_method, range(3, 11))
 
     print("Creating interactive visualization...")
-    fig = create_interactive_visualization(embedding, embedding_method, categories, titles, ai_materials, all_categories, silhouette_scores)
+    fig = create_interactive_visualization(
+        embedding_umap, embedding_method, categories, titles, ai_materials, all_categories, silhouette_scores
+    )
     
-    return embedding, categories, titles, fig
+    return embedding_umap, categories, titles, fig
+
 
 # Example usage
 if __name__ == "__main__":
     try:
-        embedding_path = sys.argv[1]
-        text_type = sys.argv[2]
+        embedding_path = "full_text/embeddings/legalbert_embeddings.npy"
+        text_type = TEXT_TYPE
         embedding = np.load(embedding_path)
         embedding, categories, titles, fig= main()
         print("Interactive visualization completed successfully!")
