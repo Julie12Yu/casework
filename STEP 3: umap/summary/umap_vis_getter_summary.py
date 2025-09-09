@@ -12,12 +12,11 @@ import re
 from sklearn.metrics import silhouette_score
 from sklearn.cluster import KMeans
 
-DIR_PATH = 'summaries/categorized_cases.json'
-EMBEDDING_DIR = "summaries/embeddings/legalbert_embeddings.npy"
+DIR_PATH = 'STEP 2: get embed/summaries/categorized_cases.json'
+EMBEDDING_DIR = "STEP 2: get embed/summaries/embeddings/legalbert_embeddings.npy"
 TEXT_TYPE = "summary"
 MIN_DIST = 0.01
 N_NEIGHBORS = 15
-
 def load_and_process_data():
     """Load JSON data and process it for visualization (new JSON format)."""
     with open(DIR_PATH, 'r', encoding='utf-8') as file:
@@ -54,7 +53,7 @@ def wrap_text(text, width=60):
     """Helper function to wrap text for better display"""
     return '<br>'.join(textwrap.wrap(str(text), width=width))
 
-def create_interactive_visualization(embedding, embedding_method, categories, titles, ai_materials, all_categories, silhouette_scores):
+def create_interactive_visualization(embedding, categories, titles, ai_materials, all_categories, silhouette_scores, embedding_method="Legal-BERT"):
     """Create extra large UMAP visualization for presentations or large displays."""
     output_file=('umap_vis_' + embedding_method + '_' + TEXT_TYPE + '.png')
     # Clean categories
@@ -259,7 +258,7 @@ def main():
     # Create visualization
     print("Creating interactive visualization...")
     fig = create_interactive_visualization(
-        embedding_umap, embedding_method, categories, titles, ai_materials, all_categories, silhouette_scores
+        embedding_umap, categories, titles, ai_materials, all_categories, silhouette_scores
     )
 
     return embedding_umap, categories, titles, fig
