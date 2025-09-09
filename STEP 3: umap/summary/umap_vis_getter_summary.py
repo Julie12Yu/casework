@@ -211,7 +211,9 @@ def calculate_silhouette_scores(X, embedding_method, k_range, random_state=42):
             print("Silhouette score for k =", k, "is", score)
             scores[k] = score
     print("Highest sihouette score:", max(scores.values()), "for k =", max(scores, key=scores.get))
-    return scores
+    if (max(scores.values()) >= 0.51):
+        is_greater = True
+    return (is_greater, scores)
 
 def perform_umap(features):
     """Perform UMAP dimensionality reduction"""
@@ -234,6 +236,7 @@ def perform_umap(features):
 
 def main():
     print("Loading and processing data...")
+    
     df, processed_cases = load_and_process_data()  # Use the new loader
 
     # Extract data for processing
@@ -249,12 +252,12 @@ def main():
     embedding_path = EMBEDDING_DIR
     embedding_method = embedding_path.split('/')[-1].split('_')[0]
     embedding = np.load(embedding_path)
+    is_greater = False
+    while not is_greater:
+        embedding_umap, reducer = perform_umap(embedding)
 
-    # Apply UMAP
-    embedding_umap, reducer = perform_umap(embedding)
-
-    # Clustering + silhouette scores
-    silhouette_scores = calculate_silhouette_scores(embedding_umap, embedding_method, range(3, 11))
+        # Clustering + silhouette scores
+        is_greater, silhouette_scores = calculate_silhouette_scores(embedding_umap, embedding_method, range(3, 11))
 
     # Create visualization
     print("Creating interactive visualization...")

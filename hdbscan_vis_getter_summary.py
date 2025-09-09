@@ -9,6 +9,7 @@ from collections import Counter
 import textwrap
 import re
 import hdbscan
+from sklearn.metrics import silhouette_score
 
 # ---------------------------
 # Config
@@ -16,9 +17,8 @@ import hdbscan
 DIR_PATH = 'STEP 2: get embed/summaries/categorized_cases.json'
 UMAP_EMBED = 'STEP 3: umap/summary/umap_embedding.npy'
 TEXT_TYPE = "summary"
-MIN_DIST = 0.01
-N_NEIGHBORS = 15
-
+MIN_CLUSTER_SIZE = 10
+MIN_SAMPLES = 10
 
 # ---------------------------
 # Helpers
@@ -60,21 +60,42 @@ def wrap_text(text, width=60):
     """Helper function to wrap text for better display"""
     return '<br>'.join(textwrap.wrap(str(text), width=width))
 
-def perform_hdbscan(embedding, min_cluster_size=10, min_samples=10):
+def perform_hdbscan(embedding):
     """Perform HDBSCAN clustering on UMAP embeddings."""
     clusterer = hdbscan.HDBSCAN(
-        min_cluster_size=min_cluster_size,
-        min_samples=min_samples,
+        min_cluster_size=MIN_CLUSTER_SIZE,
+        min_samples=MIN_SAMPLES,
         gen_min_span_tree=True
     )
     labels = clusterer.fit_predict(embedding)
     return labels, clusterer
 
+def calculate_hdbscan_silhouette(X, labels):
+    """
+    Calculate silhouette score for HDBSCAN clustering.
+    Returns None if there are fewer than 2 clusters (ignoring noise).
+    """
+    # Filter out noise points (-1)
+    mask = labels != -1
+    if mask.sum() == 0:
+        print("All points classified as noise, cannot compute silhouette.")
+        return None
+    
+    unique_clusters = set(labels[mask])
+    if len(unique_clusters) < 2:
+        print(f"Only {len(unique_clusters)} cluster found (ignoring noise). Cannot compute silhouette.")
+        return None
+
+    score = silhouette_score(X[mask], labels[mask])
+    print(f"HDBSCAN silhouette score: {score:.4f} (computed on {mask.sum()} points)")
+    return score
+
 
 def create_interactive_visualization_hdbscan(
-    embedding, titles, ai_materials, all_categories, hdbscan_labels, embedding_method="Legal-BERT"
+    embedding, titles, ai_materials, all_categories, hdbscan_labels,
+    silhouette_score_val=None, embedding_method="Legal-BERT"
 ):
-    """Create UMAP visualization with HDBSCAN clustering on top."""
+    """Create UMAP visualization with HDBSCAN clustering on top, with silhouette score text."""
     output_file = ('hdbscan_' + embedding_method + '_' + TEXT_TYPE + '.png')
 
     # Convert -1 (noise) to string
@@ -128,9 +149,14 @@ def create_interactive_visualization_hdbscan(
                               '<extra></extra>'
             ))
 
+    # Add silhouette score info
+    subtitle = embedding_method
+    if silhouette_score_val is not None:
+        subtitle += f" | Silhouette score: {silhouette_score_val:.3f}"
+
     fig.update_layout(
         title={
-            'text': 'Legal Cases Visualization with HDBSCAN<br><sub>' + embedding_method + '</sub>',
+            'text': f'Legal Cases Visualization with HDBSCAN<br><sub>{subtitle}</sub>',
             'x': 0.5,
             'font': {'size': 36}
         },
@@ -173,6 +199,7 @@ def create_interactive_visualization_hdbscan(
     return fig
 
 
+
 # ---------------------------
 # Main entry
 # ---------------------------
@@ -190,12 +217,15 @@ def main():
 
     # Run HDBSCAN
     print("Running HDBSCAN clustering...")
-    hdbscan_labels, clusterer = perform_hdbscan(embedding_umap, min_cluster_size=5)
+    hdbscan_labels, clusterer = perform_hdbscan(embedding_umap)
+
+    silhouette_score_hdb = calculate_hdbscan_silhouette(embedding_umap, hdbscan_labels)
 
     # Create visualization
     print("Creating interactive visualization with HDBSCAN...")
     fig = create_interactive_visualization_hdbscan(
-        embedding_umap, titles, ai_materials, all_categories, hdbscan_labels
+        embedding_umap, titles, ai_materials, all_categories, hdbscan_labels,
+        silhouette_score_val=silhouette_score_hdb
     )
 
     return embedding_umap, titles, hdbscan_labels, fig
