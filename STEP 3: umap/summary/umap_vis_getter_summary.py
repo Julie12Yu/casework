@@ -228,6 +228,7 @@ def perform_umap(features):
     )
     
     embedding = reducer.fit_transform(features_scaled)
+    np.save('umap_embedding.npy', embedding)
     return embedding, reducer
 
 

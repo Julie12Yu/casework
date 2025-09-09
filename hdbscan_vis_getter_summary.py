@@ -14,7 +14,7 @@ import hdbscan
 # Config
 # ---------------------------
 DIR_PATH = 'STEP 2: get embed/summaries/categorized_cases.json'
-EMBEDDING_DIR = "STEP 2: get embed/summaries/embeddings/legalbert_embeddings.npy"
+UMAP_EMBED = 'STEP 3: umap/summary/umap_embedding.npy'
 TEXT_TYPE = "summary"
 MIN_DIST = 0.01
 N_NEIGHBORS = 15
@@ -60,24 +60,6 @@ def wrap_text(text, width=60):
     """Helper function to wrap text for better display"""
     return '<br>'.join(textwrap.wrap(str(text), width=width))
 
-
-def perform_umap(features):
-    """Perform UMAP dimensionality reduction"""
-    n_samples = features.shape[0]
-    n_neighbors = min(N_NEIGHBORS, max(2, n_samples - 1))
-    
-    scaler = StandardScaler()
-    features_scaled = scaler.fit_transform(features)
-    
-    reducer = UMAP(
-        n_neighbors=n_neighbors,
-        min_dist=MIN_DIST,
-    )
-    
-    embedding = reducer.fit_transform(features_scaled)
-    return embedding, reducer
-
-
 def perform_hdbscan(embedding, min_cluster_size=10, min_samples=10):
     """Perform HDBSCAN clustering on UMAP embeddings."""
     clusterer = hdbscan.HDBSCAN(
@@ -93,7 +75,7 @@ def create_interactive_visualization_hdbscan(
     embedding, titles, ai_materials, all_categories, hdbscan_labels, embedding_method="Legal-BERT"
 ):
     """Create UMAP visualization with HDBSCAN clustering on top."""
-    output_file = ('umap_vis_hdbscan_' + embedding_method + '_' + TEXT_TYPE + '.png')
+    output_file = ('hdbscan_' + embedding_method + '_' + TEXT_TYPE + '.png')
 
     # Convert -1 (noise) to string
     labels_str = ["Noise" if l == -1 else f"Cluster {l}" for l in hdbscan_labels]
@@ -204,8 +186,7 @@ def main():
 
     print(f"Loaded {len(titles)} cases")
 
-    embedding = np.load(EMBEDDING_DIR)
-    embedding_umap, reducer = perform_umap(embedding)
+    embedding_umap = np.load(UMAP_EMBED)
 
     # Run HDBSCAN
     print("Running HDBSCAN clustering...")
